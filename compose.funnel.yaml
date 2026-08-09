@@ -1,0 +1,48 @@
+name: stranded-detector-funnel
+
+services:
+  tailscale:
+    image: "${TAILSCALE_IMAGE:-tailscale/tailscale:latest}"
+    hostname: "${TS_HOSTNAME:-stranded-detector}"
+    restart: unless-stopped
+    environment:
+      TS_AUTH_ONCE: "true"
+      TS_HOSTNAME: "${TS_HOSTNAME:-stranded-detector}"
+      TS_SERVE_CONFIG: /config/funnel.json
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale-config:/config:ro
+
+  stranded-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - tailscale
+    expose:
+      - "3000"
+    networks:
+      default:
+        aliases:
+          - stranded-detector-backend
+    environment:
+      COOKIE_SECRET: "${COOKIE_SECRET:?Set COOKIE_SECRET to at least 32 random characters}"
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "1"
+      DATABASE_PATH: /data/stranded.sqlite
+      MAP_TILE_URL: "${MAP_TILE_URL:-https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png}"
+      MAP_ATTRIBUTION: "${MAP_ATTRIBUTION:-&copy; OpenStreetMap &copy; CARTO}"
+      ENABLE_DEV_GPS: "${ENABLE_DEV_GPS:-false}"
+      FRONTEND_ORIGINS: "${FRONTEND_ORIGINS:-}"
+      REPORT_TTL_MS: "${REPORT_TTL_MS:-300000}"
+      EXPIRY_SWEEP_MS: "${EXPIRY_SWEEP_MS:-1000}"
+      HEARTBEAT_MS: "${HEARTBEAT_MS:-15000}"
+    volumes:
+      - stranded-data:/data
+
+volumes:
+  stranded-data:
+  tailscale-state:

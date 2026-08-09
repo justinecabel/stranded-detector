@@ -1,0 +1,14 @@
+<section id="active-reports" class="active-reports" hidden>
+  <% activeReports.forEach((report) => { %>
+    <form
+      class="active-report-state"
+      data-created-at="<%= report.created_at %>"
+      data-expires-at="<%= report.expires_at %>"
+      method="post"
+      action="/reports/<%= report.id %>/resolve"
+      hx-post="/reports/<%= report.id %>/resolve"
+      hx-target="#active-reports"
+      hx-swap="outerHTML"
+    ></form>
+  <% }) %>
+</section>

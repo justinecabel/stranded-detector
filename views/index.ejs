@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en-PH">
+  <% const assets = typeof assetBaseUrl === 'string' ? assetBaseUrl : ''; %>
+  <% const apiBase = typeof apiBaseUrl === 'string' ? apiBaseUrl : ''; %>
+  <% const pageTitle = typeof seoTitle === 'string' ? seoTitle : 'Stranded Philippines – Live Stranded Reports & Heatmap'; %>
+  <% const pageDescription = typeof seoDescription === 'string' ? seoDescription : 'View anonymous, short-lived reports of stranded people across the Philippines on a live heatmap. Report your location and mark yourself safe.'; %>
+  <% const pageUrl = typeof canonicalUrl === 'string' ? canonicalUrl : ''; %>
+  <% const canIndex = typeof allowIndexing === 'boolean' ? allowIndexing : false; %>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#091b19">
+    <meta
+      name="description"
+      content="<%= pageDescription %>"
+    >
+    <meta name="robots" content="<%= canIndex ? 'index, follow, max-image-preview:large' : 'noindex, nofollow' %>">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Stranded Philippines">
+    <meta property="og:locale" content="en_PH">
+    <meta property="og:title" content="<%= pageTitle %>">
+    <meta property="og:description" content="<%= pageDescription %>">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="<%= pageTitle %>">
+    <meta name="twitter:description" content="<%= pageDescription %>">
+    <% if (pageUrl) { %>
+      <link rel="canonical" href="<%= pageUrl %>">
+      <meta property="og:url" content="<%= pageUrl %>">
+    <% } %>
+    <% if (staticContentSecurityPolicy) { %>
+      <meta http-equiv="Content-Security-Policy" content="<%= staticContentSecurityPolicy %>">
+    <% } %>
+    <% if (apiBase) { %>
+      <meta name="htmx-config" content='{"selfRequestsOnly":false}'>
+    <% } %>
+    <title><%= pageTitle %></title>
+    <% if (structuredData) { %>
+      <script type="application/ld+json"><%- structuredData %></script>
+    <% } %>
+    <link rel="stylesheet" href="<%= assets %>/vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="<%= assets %>/assets/styles.css">
+    <script src="<%= assets %>/vendor/htmx/htmx.min.js" defer></script>
+    <script src="<%= assets %>/vendor/leaflet/leaflet.js" defer></script>
+    <script src="<%= assets %>/vendor/leaflet-heat/leaflet-heat.js" defer></script>
+    <script src="<%= assets %>/assets/app.js" defer></script>
+  </head>
+  <body
+    data-map-tile-url="<%= mapTileUrl %>"
+    data-map-attribution="<%= mapAttribution %>"
+    data-enable-dev-gps="<%= enableDevGps %>"
+    data-api-base-url="<%= apiBase %>"
+  >
+    <a class="skip-link" href="#report-button">Skip to report controls</a>
+
+    <main class="app-shell">
+      <div class="sr-only">
+        <h1>Stranded Philippines live reports</h1>
+        <p><%= pageDescription %> This community awareness map is not an emergency-dispatch service.</p>
+      </div>
+      <section class="map-region" aria-label="Live stranded-person heat map">
+        <div id="map"></div>
+        <output class="zoom-level" id="zoom-level" aria-hidden="true"></output>
+      </section>
+
+      <section class="history-roller" id="history-roller" aria-label="Heatmap history and people scale">
+          <div class="history-roller__player">
+            <button
+              class="history-roller__play"
+              id="history-play"
+              type="button"
+              aria-label="Play heatmap history"
+            >
+              <span aria-hidden="true">&#9654;</span>
+            </button>
+            <div class="history-roller__timeline">
+              <div class="history-roller__segments" aria-hidden="true">
+                <span>3h</span>
+                <span>2h</span>
+                <span>1h</span>
+                <span>Now</span>
+              </div>
+              <input
+                id="history-slider"
+                type="range"
+                min="0"
+                max="180"
+                step="5"
+                value="0"
+                dir="rtl"
+                aria-label="Heatmap history time"
+              >
+              <output id="history-time-label" aria-live="polite">Now</output>
+            </div>
+          </div>
+
+          <aside
+            class="heatmap-legend"
+            aria-label="People reported nearby: orange is 1 to 3 and deep red is 100 or more"
+          >
+            <ul class="heatmap-legend__items">
+              <li>1&ndash;3</li>
+              <li>4&ndash;9</li>
+              <li>10&ndash;24</li>
+              <li>25&ndash;99</li>
+              <li>100+</li>
+            </ul>
+          </aside>
+      </section>
+
+      <section class="control-panel" aria-label="Reporting controls">
+        <%- include('partials/active-reports', { activeReports, now, statusMessage: '' }) %>
+
+        <div class="report-controls">
+          <button class="button button--report" id="report-button" type="button">
+            <strong>I am stranded :(</strong>
+          </button>
+
+          <button
+            class="button button--recenter"
+            id="recenter-button"
+            type="button"
+            aria-label="My Location"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="6.5"></circle>
+              <circle class="button--recenter__dot" cx="12" cy="12" r="2.25"></circle>
+              <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"></path>
+            </svg>
+          </button>
+        </div>
+
+        <form
+          class="gps-report-form"
+          id="report-form"
+          method="post"
+          action="/reports"
+          hx-post="/reports"
+          hx-target="#active-reports"
+          hx-swap="outerHTML"
+        >
+          <input type="hidden" name="type" value="self">
+          <input type="hidden" name="latitude" id="latitude">
+          <input type="hidden" name="longitude" id="longitude">
+        </form>
+
+        <div id="report-status" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <dialog class="gps-permission" id="gps-permission" aria-labelledby="gps-permission-title">
+      <h2 id="gps-permission-title">Allow GPS location?</h2>
+      <div class="gps-permission__actions">
+        <button class="button button--allow" id="allow-gps" type="button">Allow GPS</button>
+        <button class="button button--later" id="gps-later" type="button">Not now</button>
+      </div>
+      <div id="gps-permission-status" role="status" aria-live="polite"></div>
+    </dialog>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+services:
+  stranded-detector:
+    build: .
+    restart: unless-stopped
+    environment:
+      COOKIE_SECRET: "${COOKIE_SECRET:?Set COOKIE_SECRET to at least 32 random characters}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      MAP_TILE_URL: "${MAP_TILE_URL:-https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png}"
+      MAP_ATTRIBUTION: "${MAP_ATTRIBUTION:-&copy; OpenStreetMap &copy; CARTO}"
+      ENABLE_DEV_GPS: "${ENABLE_DEV_GPS:-false}"
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - stranded-data:/data
+
+volumes:
+  stranded-data:

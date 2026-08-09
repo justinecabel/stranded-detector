@@ -1,0 +1,13 @@
+node_modules/
+data/
+test-results/
+playwright-report/
+dist/
+.tmp-tunnel/
+.env*
+!.env.example
+!.env.funnel.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+npm-debug.log*
