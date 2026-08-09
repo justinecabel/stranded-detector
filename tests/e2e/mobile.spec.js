@@ -336,3 +336,34 @@ test('development GPS query simulates Manila without browser permission', async 
   await expect(page.locator('.active-report-state')).toHaveCount(1);
   await context.close();
 });
+
+test('history label uses the free viewport margin at wide widths', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 921, height: 934 } });
+  const page = await context.newPage();
+
+  await page.goto('/?devGps=manila');
+  const historySlider = page.locator('#history-slider');
+  await historySlider.fill('0');
+
+  const layout = await page.locator('#history-time-label').evaluate((element) => {
+    const label = element.getBoundingClientRect();
+    const dock = document.querySelector('#history-roller').getBoundingClientRect();
+    const timeline = document.querySelector('.history-roller__timeline').getBoundingClientRect();
+    const pointer = getComputedStyle(element, '::after');
+    const pointerPosition = Number.parseFloat(pointer.left);
+
+    return {
+      labelUsesRightMargin: label.right > dock.right,
+      labelInsideViewport: label.right <= document.documentElement.clientWidth,
+      pointerOffsetFromCenter: pointerPosition - label.width / 2,
+      pointerToTimelineEnd: timeline.right - (label.left + pointerPosition)
+    };
+  });
+
+  expect(layout.labelUsesRightMargin).toBe(true);
+  expect(layout.labelInsideViewport).toBe(true);
+  expect(layout.pointerOffsetFromCenter).toBeCloseTo(0, 1);
+  expect(layout.pointerToTimelineEnd).toBeCloseTo(0, 1);
+
+  await context.close();
+});

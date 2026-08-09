@@ -256,13 +256,13 @@
   function positionHistoryTimeLabel() {
     const timeline = historyTimeLabel.parentElement;
     const timelineBounds = timeline.getBoundingClientRect();
-    const dockBounds = historyRoller.getBoundingClientRect();
     const timelineWidth = timelineBounds.width;
     const labelWidth = Math.min(historyTimeLabel.getBoundingClientRect().width, timelineWidth);
     const timelineProgress = 1 - historyOffsetMinutes / HISTORY_MAX_MINUTES;
     const targetPosition = timelineWidth * timelineProgress;
-    const availableSpaceBeforeTimeline = timelineBounds.left - dockBounds.left;
-    const availableSpaceAfterTimeline = dockBounds.right - timelineBounds.right;
+    const viewportWidth = document.documentElement.clientWidth;
+    const availableSpaceBeforeTimeline = timelineBounds.left;
+    const availableSpaceAfterTimeline = viewportWidth - timelineBounds.right;
     const labelCenter = Math.max(
       labelWidth / 2 - availableSpaceBeforeTimeline,
       Math.min(
