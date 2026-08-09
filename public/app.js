@@ -915,11 +915,22 @@
   document.body.addEventListener('reportLimited', (event) => {
     startReportCooldown(Number(event.detail?.cooldownMs) || 5000);
   });
-  if (apiBaseUrl && window.htmx) {
+  function loadActiveReportsFromApi() {
+    if (!apiBaseUrl || !window.htmx) return;
+
     window.htmx.ajax('GET', apiUrl('/reports/mine'), {
       target: '#active-reports',
       swap: 'outerHTML'
+    }).catch(() => {
+      expiryRefreshPending = false;
     });
+  }
+
+  if (apiBaseUrl) {
+    // HTMX reads the cross-origin policy from its meta tag on DOMContentLoaded.
+    // Deferred app scripts run just before that event, so wait until HTMX has
+    // applied the policy before making the first Funnel request.
+    window.addEventListener('DOMContentLoaded', loadActiveReportsFromApi, { once: true });
   }
   startCountdowns();
 

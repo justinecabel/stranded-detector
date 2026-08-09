@@ -42,6 +42,7 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     const page = await request(system.app).get('/').expect(200);
     assert.match(page.text, /Stranded Philippines/);
     assert.match(page.text, /noindex, nofollow/);
+    assert.match(page.text, /hx-post="\/reports"/);
     assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
     assert.match(page.headers['set-cookie'][0], /HttpOnly/);
     assert.match(page.headers['content-security-policy'], /default-src 'self'/);
