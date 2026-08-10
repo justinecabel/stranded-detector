@@ -23,14 +23,19 @@
   const REPORT_BUTTON_LABEL = 'I am stranded :(';
   const ACTIVE_REPORT_BUTTON_LABEL = 'Click again to mark yourself safe';
   const COOLDOWN_BUTTON_LABEL = 'Relax!';
-  const HEAT_MIN_ZOOM = 14;
-  const HEAT_MAX_ZOOM = 20;
   const HEAT_SCALE_MAX = 1;
-  const GPS_MIN_ZOOM = HEAT_MIN_ZOOM;
-  const GPS_DEFAULT_ZOOM = HEAT_MAX_ZOOM;
+  const GPS_MIN_ZOOM = 14;
+  const GPS_DEFAULT_ZOOM = 20;
   const HISTORY_MAX_MINUTES = 180;
   const HISTORY_STEP_MINUTES = 5;
   const DEVICE_TOKEN_STORAGE_KEY = 'stranded-detector-device-token';
+  const HEAT_GRADIENT = {
+    0.2: '#f97316',
+    0.4: '#fb923c',
+    0.6: '#ef4444',
+    0.8: '#dc2626',
+    1: '#7f1d1d'
+  };
 
   function apiUrl(pathname) {
     return apiBaseUrl ? `${apiBaseUrl}${pathname}` : pathname;
@@ -79,6 +84,12 @@
     [PHILIPPINES.south, PHILIPPINES.west],
     [PHILIPPINES.north, PHILIPPINES.east]
   );
+  const philippinesBbox = [
+    PHILIPPINES.west,
+    PHILIPPINES.south,
+    PHILIPPINES.east,
+    PHILIPPINES.north
+  ].join(',');
 
   function readDevGps() {
     if (!devGpsEnabled) return null;
@@ -125,17 +136,52 @@
     minOpacity: 0.28,
     max: HEAT_SCALE_MAX,
     maxZoom: 20,
-    gradient: {
-      0.2: '#f97316',
-      0.4: '#fb923c',
-      0.6: '#ef4444',
-      0.8: '#dc2626',
-      1: '#7f1d1d'
-    }
+    gradient: HEAT_GRADIENT
   }).addTo(map);
 
+  const overviewMap = L.map('overview-map', {
+    attributionControl: false,
+    boxZoom: false,
+    doubleClickZoom: false,
+    dragging: false,
+    fadeAnimation: false,
+    keyboard: false,
+    minZoom: 3,
+    maxZoom: 7,
+    scrollWheelZoom: false,
+    touchZoom: false,
+    zoomAnimation: false,
+    zoomControl: false
+  });
+
+  L.tileLayer(tileUrl, {
+    attribution: '',
+    maxNativeZoom: 19,
+    maxZoom: 7,
+    opacity: 0.78,
+    crossOrigin: true
+  }).addTo(overviewMap);
+  overviewMap.fitBounds(philippinesBounds, { animate: false, padding: [5, 5] });
+
+  const overviewHeatLayer = L.heatLayer([], {
+    radius: 12,
+    blur: 9,
+    minOpacity: 0.36,
+    max: HEAT_SCALE_MAX,
+    maxZoom: 7,
+    gradient: HEAT_GRADIENT
+  }).addTo(overviewMap);
+  const overviewViewport = L.rectangle(map.getBounds(), {
+    className: 'overview-map__viewport',
+    color: '#60a5fa',
+    fill: true,
+    fillColor: '#3b82f6',
+    fillOpacity: 0.16,
+    interactive: false,
+    weight: 2.5
+  }).addTo(overviewMap);
+
   let eventSource;
-  let reconnectTimer;
   let zoomIndicatorTimer;
   let countdownTimer;
   let countdownAnimationFrame;
@@ -150,6 +196,7 @@
   let reportAfterPermission = false;
   let followingGps = true;
   let heatSyncFrame;
+  let mapResizeFrame;
   let displayedHeatCells = [];
   let historyOffsetMinutes = 0;
   let historyRequestId = 0;
@@ -235,13 +282,23 @@
 
   function renderHeatCells(cells = historyOffsetMinutes === 0 ? latestHeatCells : displayedHeatCells) {
     const visibleCells = cells.map((cell) => ({ ...cell }));
-    const heatCanvas = document.querySelector('.leaflet-heatmap-layer');
-    heatCanvas?.setAttribute('data-cell-count', String(visibleCells.length));
+    const heatPoints = visibleCells.map((cell) => [
+      cell.latitude,
+      cell.longitude,
+      heatmapWeight(cell.count)
+    ]);
 
     heatLayer.setOptions({ max: HEAT_SCALE_MAX });
-    heatLayer.setLatLngs(
-      visibleCells.map((cell) => [cell.latitude, cell.longitude, heatmapWeight(cell.count)])
-    );
+    heatLayer.setLatLngs(heatPoints);
+    overviewHeatLayer.setOptions({ max: HEAT_SCALE_MAX });
+    overviewHeatLayer.setLatLngs(heatPoints);
+
+    map.getContainer()
+      .querySelector('.leaflet-heatmap-layer')
+      ?.setAttribute('data-cell-count', String(visibleCells.length));
+    overviewMap.getContainer()
+      .querySelector('.leaflet-heatmap-layer')
+      ?.setAttribute('data-cell-count', String(visibleCells.length));
   }
 
   function formatHistoryOffset(minutes) {
@@ -312,20 +369,6 @@
   }
 
   async function loadHistory() {
-    const zoom = map.getZoom();
-    if (zoom < HEAT_MIN_ZOOM || zoom > HEAT_MAX_ZOOM) {
-      displayedHeatCells = [];
-      renderHeatCells(displayedHeatCells);
-      return;
-    }
-
-    const bbox = viewportBbox();
-    if (!bbox) {
-      displayedHeatCells = [];
-      renderHeatCells(displayedHeatCells);
-      return;
-    }
-
     historyAbortController?.abort();
     historyAbortController = new AbortController();
     const requestId = ++historyRequestId;
@@ -333,7 +376,7 @@
 
     try {
       const response = await fetch(
-        apiUrl(`/history?bbox=${encodeURIComponent(bbox)}&at=${observedAt}`),
+        apiUrl(`/history?bbox=${encodeURIComponent(philippinesBbox)}&at=${observedAt}`),
         { cache: 'no-store', signal: historyAbortController.signal }
       );
       if (!response.ok) throw new Error(`History request failed: ${response.status}`);
@@ -362,7 +405,7 @@
       historyRequestId += 1;
       displayedHeatCells = latestHeatCells;
       renderHeatCells();
-      scheduleMapDataRefresh();
+      connectEvents();
       return;
     }
 
@@ -388,43 +431,12 @@
     }, 850);
   }
 
-  function viewportBbox() {
-    const bounds = map.getBounds();
-    const west = Math.max(PHILIPPINES.west, bounds.getWest());
-    const east = Math.min(PHILIPPINES.east, bounds.getEast());
-    const south = Math.max(PHILIPPINES.south, bounds.getSouth());
-    const north = Math.min(PHILIPPINES.north, bounds.getNorth());
-
-    if (west >= east || south >= north) {
-      return null;
-    }
-    return [west, south, east, north].map((value) => value.toFixed(6)).join(',');
-  }
-
   function connectEvents() {
     closeLiveEvents();
 
     if (historyOffsetMinutes !== 0) return;
 
-    const zoom = map.getZoom();
-    if (zoom < HEAT_MIN_ZOOM || zoom > HEAT_MAX_ZOOM) {
-      latestHeatCells = [];
-      displayedHeatCells = [];
-      document.querySelector('.leaflet-heatmap-layer')?.setAttribute('data-cell-count', '0');
-      heatLayer.setLatLngs([]);
-      return;
-    }
-
-    const bbox = viewportBbox();
-    if (!bbox) {
-      latestHeatCells = [];
-      displayedHeatCells = [];
-      document.querySelector('.leaflet-heatmap-layer')?.setAttribute('data-cell-count', '0');
-      heatLayer.setLatLngs([]);
-      return;
-    }
-
-    eventSource = new EventSource(apiUrl(`/events?bbox=${encodeURIComponent(bbox)}`));
+    eventSource = new EventSource(apiUrl(`/events?bbox=${encodeURIComponent(philippinesBbox)}`));
     eventSource.addEventListener('snapshot', (event) => {
       const snapshot = JSON.parse(event.data);
       latestHeatCells = snapshot.cells;
@@ -438,12 +450,52 @@
     heatSyncFrame = requestAnimationFrame(() => {
       heatSyncFrame = undefined;
       heatLayer._reset?.();
+      updateOverviewViewport();
     });
   }
 
+  function overviewViewportBounds() {
+    const mainBounds = map.getBounds();
+    const centerPoint = overviewMap.latLngToLayerPoint(map.getCenter());
+    const northWest = overviewMap.latLngToLayerPoint(mainBounds.getNorthWest());
+    const southEast = overviewMap.latLngToLayerPoint(mainBounds.getSouthEast());
+    const halfWidth = Math.max(Math.abs(southEast.x - northWest.x) / 2, 6);
+    const halfHeight = Math.max(Math.abs(southEast.y - northWest.y) / 2, 6);
+    const adjustedNorthWest = centerPoint.subtract(L.point(halfWidth, halfHeight));
+    const adjustedSouthEast = centerPoint.add(L.point(halfWidth, halfHeight));
+
+    return L.latLngBounds(
+      overviewMap.layerPointToLatLng(adjustedNorthWest),
+      overviewMap.layerPointToLatLng(adjustedSouthEast)
+    );
+  }
+
+  function updateOverviewViewport() {
+    overviewViewport.setBounds(overviewViewportBounds());
+  }
+
+  function resizeMaps() {
+    if (mapResizeFrame !== undefined) cancelAnimationFrame(mapResizeFrame);
+    mapResizeFrame = requestAnimationFrame(() => {
+      mapResizeFrame = undefined;
+      map.invalidateSize({ animate: false, pan: false });
+      overviewMap.invalidateSize({ animate: false, pan: false });
+      overviewMap.fitBounds(philippinesBounds, { animate: false, padding: [5, 5] });
+      updateOverviewViewport();
+      renderHeatCells();
+    });
+  }
+
+  const mapResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(resizeMaps)
+    : undefined;
+  mapResizeObserver?.observe(map.getContainer());
+  mapResizeObserver?.observe(overviewMap.getContainer());
+  window.addEventListener('resize', resizeMaps);
+  window.visualViewport?.addEventListener('resize', resizeMaps);
+
   map.on('moveend', () => {
     syncHeatmapToMap();
-    scheduleMapDataRefresh();
     updateRecenterButton();
   });
   map.on('move', syncHeatmapToMap);
@@ -497,14 +549,6 @@
   map.on('zoomstart', beginZoom);
   map.on('zoom', showZoomLevel);
   map.on('zoomend', finishZoom);
-
-  function scheduleMapDataRefresh() {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(() => {
-      if (historyOffsetMinutes === 0) connectEvents();
-      else loadHistory();
-    }, 350);
-  }
 
   historySlider.addEventListener('input', () => {
     if (historyPlaying) stopHistoryPlayback();
@@ -946,5 +990,9 @@
     stopHistoryPlayback();
     historyAbortController?.abort();
     if (heatSyncFrame !== undefined) cancelAnimationFrame(heatSyncFrame);
+    if (mapResizeFrame !== undefined) cancelAnimationFrame(mapResizeFrame);
+    mapResizeObserver?.disconnect();
+    window.removeEventListener('resize', resizeMaps);
+    window.visualViewport?.removeEventListener('resize', resizeMaps);
   });
 })();

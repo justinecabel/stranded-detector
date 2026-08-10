@@ -14,6 +14,8 @@ test('GPS-only self-report works at 320px with touch-sized controls', async ({ b
 
   await page.goto('/');
   await expect(page.locator('#map')).toBeVisible();
+  await expect(page.locator('#overview-map')).toBeVisible();
+  await expect(page.locator('.overview-map__viewport')).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-map-tile-url', /dark_all/);
   const locationMarker = page.locator('.user-location-marker');
   await expect(locationMarker).toBeVisible();
@@ -25,7 +27,7 @@ test('GPS-only self-report works at 320px with touch-sized controls', async ({ b
   await expect(zoomLevel).toHaveAttribute('aria-hidden', 'true', { timeout: 3_000 });
   await expect.poll(() => eventRequests.length).toBeGreaterThan(0);
   await expect(page.locator('#map')).not.toHaveClass(/is-zooming/);
-  await expect(page.locator('.leaflet-heatmap-layer')).not.toHaveCSS('opacity', '0');
+  await expect(page.locator('#map .leaflet-heatmap-layer')).not.toHaveCSS('opacity', '0');
   const heatmapLegend = page.locator('.heatmap-legend');
   await expect(heatmapLegend).toBeVisible();
   await expect(heatmapLegend).toHaveText('1–3\n4–9\n10–24\n25–99\n100+');
@@ -114,9 +116,12 @@ test('GPS-only self-report works at 320px with touch-sized controls', async ({ b
   await expect(page.locator('#active-reports .message')).toHaveCount(0);
   await expect(page.locator('.active-report-state')).toHaveCount(1);
   await expect.poll(() =>
-    page.locator('.leaflet-heatmap-layer').getAttribute('data-cell-count')
+    page.locator('#map .leaflet-heatmap-layer').getAttribute('data-cell-count')
   ).toBe('1');
-  const maxHeatAlpha = await page.locator('.leaflet-heatmap-layer').evaluate((canvas) => {
+  await expect.poll(() =>
+    page.locator('#overview-map .leaflet-heatmap-layer').getAttribute('data-cell-count')
+  ).toBe('1');
+  const maxHeatAlpha = await page.locator('#map .leaflet-heatmap-layer').evaluate((canvas) => {
     const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
     let maximum = 0;
     for (let index = 3; index < pixels.length; index += 4) {
@@ -181,7 +186,8 @@ test('denied GPS prevents reporting at 390px', async ({ browser }) => {
   await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toBeVisible();
   await page.getByRole('button', { name: 'Not now', exact: true }).click();
   await page.waitForTimeout(500);
-  expect(eventRequests).toHaveLength(0);
+  expect(eventRequests).toHaveLength(1);
+  expect(eventRequests[0]).toContain('bbox=116.5%2C4.3%2C127%2C21.3');
   await page.getByRole('button', { name: 'I am stranded :(', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toBeVisible();
   await page.getByRole('button', { name: 'Allow GPS', exact: true }).click();
@@ -265,8 +271,9 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   const page = await context.newPage();
 
   await page.goto('/?devGps=manila');
-  const heatLayer = page.locator('.leaflet-heatmap-layer');
+  const heatLayer = page.locator('#map .leaflet-heatmap-layer');
   await expect(heatLayer).toHaveCount(1);
+  await expect(page.locator('#overview-map .leaflet-heatmap-layer')).toHaveCount(1);
 
   await page.mouse.move(195, 360);
   await page.mouse.down();
@@ -275,6 +282,22 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
 
   await page.mouse.up();
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
+
+  await page.setViewportSize({ width: 430, height: 700 });
+  const overviewViewportBox = await page.locator('.overview-map__viewport').boundingBox();
+  expect(overviewViewportBox.width).toBeGreaterThanOrEqual(10);
+  expect(overviewViewportBox.height).toBeGreaterThanOrEqual(10);
+  const resizedMap = await page.locator('#map').evaluate((element) => {
+    const canvas = element.querySelector('.leaflet-heatmap-layer');
+    return {
+      mapWidth: element.clientWidth,
+      mapHeight: element.clientHeight,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height
+    };
+  });
+  expect(resizedMap.canvasWidth).toBe(resizedMap.mapWidth);
+  expect(resizedMap.canvasHeight).toBe(resizedMap.mapHeight);
   await context.close();
 });
 

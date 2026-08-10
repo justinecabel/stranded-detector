@@ -45,6 +45,50 @@ button {
   background: #121821;
 }
 
+.overview-map {
+  position: fixed;
+  z-index: 560;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(0.75rem, env(safe-area-inset-left));
+  width: clamp(5.75rem, 25vw, 7.25rem);
+  aspect-ratio: 0.78;
+  overflow: hidden;
+  background: rgba(9, 17, 24, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 0.85rem;
+  box-shadow: 0 8px 24px rgba(0, 8, 18, 0.38);
+  pointer-events: none;
+}
+
+#overview-map {
+  position: absolute;
+  inset: 0;
+  background: #121821;
+}
+
+.overview-map__label {
+  position: absolute;
+  z-index: 500;
+  right: 0.35rem;
+  bottom: 0.3rem;
+  padding: 0.18rem 0.3rem;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(7, 15, 23, 0.76);
+  border-radius: 0.3rem;
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.overview-map__viewport {
+  fill: rgba(59, 130, 246, 0.16);
+  stroke: #60a5fa;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
 .leaflet-tile-pane {
   filter: grayscale(1) contrast(1.08);
 }
