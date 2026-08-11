@@ -349,6 +349,14 @@ test('history endpoint returns heatmap state for the selected time', async () =>
       .get(`/history?bbox=${bbox}&minutes=180&step=0`)
       .expect(400);
 
+    const boundary = await request(system.app)
+      .get(`/history?bbox=${bbox}&at=${started + 360_000 - 3 * 60 * 60 * 1000 - 1}`)
+      .expect(200);
+    assert.equal(
+      boundary.body.observedAt,
+      started + 360_000 - 3 * 60 * 60 * 1000
+    );
+
     await request(system.app)
       .get(`/history?bbox=${bbox}&at=${started - 3 * 60 * 60 * 1000 - 1}`)
       .expect(400);

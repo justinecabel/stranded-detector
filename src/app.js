@@ -16,6 +16,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(dirname, '..');
 const REPORT_LIMIT_COOLDOWN_MS = 5000;
 const HISTORY_WINDOW_MS = 3 * 60 * 60 * 1000;
+const HISTORY_REQUEST_GRACE_MS = 60_000;
 
 function isAllowedOrigin(req, config, origin) {
   if (!origin) return true;
@@ -272,13 +273,16 @@ export function createApplication({
     if (
       !bbox ||
       !Number.isFinite(observedAt) ||
-      observedAt < currentTime - HISTORY_WINDOW_MS ||
-      observedAt > currentTime + 60_000
+      observedAt < currentTime - HISTORY_WINDOW_MS - HISTORY_REQUEST_GRACE_MS ||
+      observedAt > currentTime + HISTORY_REQUEST_GRACE_MS
     ) {
       return res.status(400).json({ error: 'A valid time within the last three hours is required' });
     }
 
-    const boundedObservedAt = Math.min(observedAt, currentTime);
+    const boundedObservedAt = Math.max(
+      currentTime - HISTORY_WINDOW_MS,
+      Math.min(observedAt, currentTime)
+    );
     res.set('Cache-Control', 'no-store');
     return res.json({
       cells: database.historyCells(bbox, boundedObservedAt),
