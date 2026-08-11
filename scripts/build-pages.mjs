@@ -13,6 +13,7 @@ const projectRoot = path.resolve(scriptDirectory, '..');
 const outputDirectory = path.join(projectRoot, 'dist');
 const backendValue = process.env.BACKEND_URL?.trim();
 const siteValue = process.env.SITE_URL?.trim();
+const observabilityOrigin = 'https://docker-observo-dev.tailde68a.ts.net';
 const seoTitle = 'Stranded Philippines – Live Reports & Heatmap';
 const seoDescription =
   'View live, anonymous reports of stranded people across the Philippines on a three-hour heatmap. Report your GPS location and mark yourself safe.';
@@ -146,9 +147,9 @@ await Promise.all(
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `connect-src 'self' ${backendUrl.origin}`,
+  `connect-src 'self' ${backendUrl.origin} ${observabilityOrigin}`,
   "img-src 'self' data: blob: https:",
-  `script-src 'self' 'sha256-${structuredDataHash}'`,
+  `script-src 'self' ${observabilityOrigin} 'sha256-${structuredDataHash}'`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "object-src 'none'",

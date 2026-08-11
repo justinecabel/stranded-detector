@@ -17,6 +17,7 @@ const projectRoot = path.resolve(dirname, '..');
 const REPORT_LIMIT_COOLDOWN_MS = 5000;
 const HISTORY_WINDOW_MS = 3 * 60 * 60 * 1000;
 const HISTORY_REQUEST_GRACE_MS = 60_000;
+const OBSERVABILITY_ORIGIN = 'https://docker-observo-dev.tailde68a.ts.net';
 
 function isAllowedOrigin(req, config, origin) {
   if (!origin) return true;
@@ -110,9 +111,9 @@ export function createApplication({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          connectSrc: ["'self'"],
+          connectSrc: ["'self'", OBSERVABILITY_ORIGIN],
           imgSrc: ["'self'", 'data:', 'https:'],
-          scriptSrc: ["'self'"],
+          scriptSrc: ["'self'", OBSERVABILITY_ORIGIN],
           styleSrc: ["'self'", "'unsafe-inline'"],
           fontSrc: ["'self'", 'data:'],
           objectSrc: ["'none'"],

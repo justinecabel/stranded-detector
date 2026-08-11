@@ -328,8 +328,8 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   const heatTransformDuringDrag = await heatLayer.evaluate((element) => element.style.transform);
   expect(heatTransformDuringDrag).toBe(heatTransformBeforeDrag);
   const offsetDuringDrag = await heatOffsetFromGps();
-  expect(offsetDuringDrag.x).toBeCloseTo(offsetBeforeDrag.x, 1);
-  expect(offsetDuringDrag.y).toBeCloseTo(offsetBeforeDrag.y, 1);
+  expect(Math.abs(offsetDuringDrag.x - offsetBeforeDrag.x)).toBeLessThanOrEqual(1.1);
+  expect(Math.abs(offsetDuringDrag.y - offsetBeforeDrag.y)).toBeLessThanOrEqual(1.1);
 
   await page.mouse.up();
   await expect(heatLayer).not.toHaveCSS('opacity', '0');

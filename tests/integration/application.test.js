@@ -47,9 +47,21 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.match(page.text, /rel="manifest" href="\/manifest\.webmanifest"/);
     assert.doesNotMatch(page.text, /id="pwa-install"/);
     assert.match(page.text, /hx-post="\/reports"/);
+    assert.match(
+      page.text,
+      /src="https:\/\/docker-observo-dev\.tailde68a\.ts\.net\/sdk\.js"[^>]*data-site-id="stranded-detector"/s
+    );
     assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
     assert.match(page.headers['set-cookie'][0], /HttpOnly/);
     assert.match(page.headers['content-security-policy'], /default-src 'self'/);
+    assert.match(
+      page.headers['content-security-policy'],
+      /script-src 'self' https:\/\/docker-observo-dev\.tailde68a\.ts\.net/
+    );
+    assert.match(
+      page.headers['content-security-policy'],
+      /connect-src 'self' https:\/\/docker-observo-dev\.tailde68a\.ts\.net/
+    );
     assert.doesNotMatch(
       page.headers['content-security-policy'],
       /upgrade-insecure-requests/
