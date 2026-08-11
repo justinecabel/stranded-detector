@@ -20,6 +20,8 @@
   const historySlider = document.querySelector('#history-slider');
   const historyTimeLabel = document.querySelector('#history-time-label');
   const historyPlayButton = document.querySelector('#history-play');
+  const overviewMapShell = document.querySelector('.overview-map');
+  const overviewMapToggle = document.querySelector('#overview-map-toggle');
   const REPORT_BUTTON_LABEL = 'I am stranded :(';
   const ACTIVE_REPORT_BUTTON_LABEL = 'Click again to mark yourself safe';
   const COOLDOWN_BUTTON_LABEL = 'Relax!';
@@ -173,12 +175,12 @@
   }).addTo(overviewMap);
   const overviewViewport = L.rectangle(map.getBounds(), {
     className: 'overview-map__viewport',
-    color: '#60a5fa',
+    color: 'rgba(255, 255, 255, 0.95)',
     fill: true,
-    fillColor: '#3b82f6',
-    fillOpacity: 0.16,
+    fillColor: '#ffffff',
+    fillOpacity: 0.04,
     interactive: false,
-    weight: 2.5
+    weight: 1
   }).addTo(overviewMap);
 
   let eventSource;
@@ -204,6 +206,10 @@
   let historyPlaybackTimer;
   let historyRefreshTimer;
   let historyPlaying = false;
+  let overviewExpanded = false;
+  let overviewPointerId;
+  let overviewPointerMoved = false;
+  let overviewPointerStart;
 
   function isInPhilippines(latlng) {
     return philippinesBounds.contains(latlng);
@@ -456,17 +462,18 @@
 
   function overviewViewportBounds() {
     const mainBounds = map.getBounds();
-    const centerPoint = overviewMap.latLngToLayerPoint(map.getCenter());
-    const northWest = overviewMap.latLngToLayerPoint(mainBounds.getNorthWest());
-    const southEast = overviewMap.latLngToLayerPoint(mainBounds.getSouthEast());
-    const halfWidth = Math.max(Math.abs(southEast.x - northWest.x) / 2, 6);
-    const halfHeight = Math.max(Math.abs(southEast.y - northWest.y) / 2, 6);
-    const adjustedNorthWest = centerPoint.subtract(L.point(halfWidth, halfHeight));
-    const adjustedSouthEast = centerPoint.add(L.point(halfWidth, halfHeight));
+    const overviewZoom = overviewMap.getZoom();
+    const centerPoint = overviewMap.project(map.getCenter(), overviewZoom);
+    const northWest = overviewMap.project(mainBounds.getNorthWest(), overviewZoom);
+    const southEast = overviewMap.project(mainBounds.getSouthEast(), overviewZoom);
+    const width = Math.max(Math.abs(southEast.x - northWest.x), Number.EPSILON);
+    const height = Math.max(Math.abs(southEast.y - northWest.y), Number.EPSILON);
+    const visibilityScale = Math.max(1, 12 / width, 12 / height);
+    const halfSize = L.point(width * visibilityScale / 2, height * visibilityScale / 2);
 
     return L.latLngBounds(
-      overviewMap.layerPointToLatLng(adjustedNorthWest),
-      overviewMap.layerPointToLatLng(adjustedSouthEast)
+      overviewMap.unproject(centerPoint.subtract(halfSize), overviewZoom),
+      overviewMap.unproject(centerPoint.add(halfSize), overviewZoom)
     );
   }
 
@@ -474,13 +481,80 @@
     overviewViewport.setBounds(overviewViewportBounds());
   }
 
+  function setOverviewExpanded(expanded) {
+    overviewExpanded = expanded;
+    overviewMapShell.classList.toggle('is-expanded', expanded);
+    overviewMapToggle.setAttribute('aria-expanded', String(expanded));
+    overviewMapToggle.setAttribute(
+      'aria-label',
+      expanded ? 'Collapse Philippines overview' : 'Expand Philippines overview'
+    );
+    resizeMaps();
+  }
+
+  function fitOverviewMap() {
+    const padding = overviewExpanded ? [1, 1] : [5, 5];
+    overviewMap.fitBounds(philippinesBounds, { animate: false, padding });
+  }
+
+  function overviewPointerLatLng(event) {
+    return overviewMap.mouseEventToLatLng(event);
+  }
+
+  function panMainMapFromOverview(event) {
+    followingGps = false;
+    map.panTo(overviewPointerLatLng(event), { animate: false });
+  }
+
+  overviewMapToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setOverviewExpanded(!overviewExpanded);
+  });
+
+  overviewMapShell.addEventListener('click', (event) => {
+    if (event.target.closest('.overview-map__toggle')) return;
+    if (!overviewExpanded) setOverviewExpanded(true);
+  });
+
+  overviewMapShell.addEventListener('pointerdown', (event) => {
+    if (!overviewExpanded || event.target.closest('.overview-map__toggle')) return;
+    overviewPointerId = event.pointerId;
+    overviewPointerMoved = false;
+    overviewPointerStart = L.point(event.clientX, event.clientY);
+    overviewMapShell.setPointerCapture(event.pointerId);
+    overviewMapShell.classList.add('is-dragging');
+    event.preventDefault();
+  });
+
+  overviewMapShell.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== overviewPointerId || !overviewPointerStart) return;
+    const current = L.point(event.clientX, event.clientY);
+    if (current.distanceTo(overviewPointerStart) >= 3) overviewPointerMoved = true;
+    if (overviewPointerMoved) panMainMapFromOverview(event);
+  });
+
+  function finishOverviewPointer(event) {
+    if (event.pointerId !== overviewPointerId) return;
+    if (!overviewPointerMoved) panMainMapFromOverview(event);
+    overviewMapShell.classList.remove('is-dragging');
+    overviewPointerId = undefined;
+    overviewPointerMoved = false;
+    overviewPointerStart = undefined;
+  }
+
+  overviewMapShell.addEventListener('pointerup', finishOverviewPointer);
+  overviewMapShell.addEventListener('pointercancel', finishOverviewPointer);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && overviewExpanded) setOverviewExpanded(false);
+  });
+
   function resizeMaps() {
     if (mapResizeFrame !== undefined) cancelAnimationFrame(mapResizeFrame);
     mapResizeFrame = requestAnimationFrame(() => {
       mapResizeFrame = undefined;
       map.invalidateSize({ animate: false, pan: false });
       overviewMap.invalidateSize({ animate: false, pan: false });
-      overviewMap.fitBounds(philippinesBounds, { animate: false, padding: [5, 5] });
+      fitOverviewMap();
       updateOverviewViewport();
       renderHeatCells();
     });

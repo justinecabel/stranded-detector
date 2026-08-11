@@ -57,7 +57,27 @@ button {
   border: 1px solid rgba(148, 163, 184, 0.45);
   border-radius: 0.85rem;
   box-shadow: 0 8px 24px rgba(0, 8, 18, 0.38);
-  pointer-events: none;
+  cursor: zoom-in;
+  pointer-events: auto;
+  transition:
+    width 180ms ease,
+    border-radius 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.overview-map.is-expanded {
+  width: auto;
+  height: min(58vh, 26rem);
+  max-width: calc(100vw - 1.5rem);
+  aspect-ratio: 0.62;
+  cursor: grab;
+  border-radius: 1rem;
+  box-shadow: 0 18px 46px rgba(0, 8, 18, 0.58);
+  touch-action: none;
+}
+
+.overview-map.is-dragging {
+  cursor: grabbing;
 }
 
 #overview-map {
@@ -82,11 +102,52 @@ button {
   text-transform: uppercase;
 }
 
+.overview-map__toggle {
+  position: absolute;
+  z-index: 510;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  place-items: center;
+  color: white;
+  background: rgba(7, 15, 23, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.overview-map__toggle svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.overview-map__collapse-icon,
+.overview-map.is-expanded .overview-map__expand-icon {
+  display: none;
+}
+
+.overview-map.is-expanded .overview-map__collapse-icon {
+  display: block;
+}
+
 .overview-map__viewport {
-  fill: rgba(59, 130, 246, 0.16);
-  stroke: #60a5fa;
-  stroke-width: 2.5;
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
+}
+
+.overview-map.is-expanded .overview-map__viewport {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke-width: 1.25;
 }
 
 .leaflet-tile-pane {

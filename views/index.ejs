@@ -62,6 +62,19 @@
         <aside class="overview-map" aria-label="Philippines overview heatmap and current viewport">
           <div id="overview-map" aria-hidden="true"></div>
           <span class="overview-map__label">Philippines</span>
+          <button
+            class="overview-map__toggle"
+            id="overview-map-toggle"
+            type="button"
+            aria-controls="overview-map"
+            aria-expanded="false"
+            aria-label="Expand Philippines overview"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="overview-map__expand-icon" d="M9 4H4v5M15 20h5v-5M4 9l6-6M20 15l-6 6" />
+              <path class="overview-map__collapse-icon" d="M4 9h5V4M20 15h-5v5M9 9 3 3M15 15l6 6" />
+            </svg>
+          </button>
         </aside>
         <output class="zoom-level" id="zoom-level" aria-hidden="true"></output>
       </section>

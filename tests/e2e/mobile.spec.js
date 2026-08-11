@@ -283,10 +283,50 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   await page.mouse.up();
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
 
-  await page.setViewportSize({ width: 430, height: 700 });
-  const overviewViewportBox = await page.locator('.overview-map__viewport').boundingBox();
-  expect(overviewViewportBox.width).toBeGreaterThanOrEqual(10);
-  expect(overviewViewportBox.height).toBeGreaterThanOrEqual(10);
+  await page.setViewportSize({ width: 421, height: 478 });
+  const overview = page.locator('.overview-map');
+  const overviewToggle = page.locator('#overview-map-toggle');
+  const collapsedOverviewBox = await overview.boundingBox();
+  await expect(overviewToggle).toHaveAttribute('aria-expanded', 'false');
+  await overview.locator('#overview-map').click({ position: { x: 12, y: 45 } });
+  await expect(overview).toHaveClass(/is-expanded/);
+  await expect(overviewToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(overviewToggle).toHaveAttribute('aria-label', 'Collapse Philippines overview');
+  await expect.poll(async () => (await overview.boundingBox()).width).toBeGreaterThan(
+    collapsedOverviewBox.width * 1.5
+  );
+  const expandedShape = await overview.boundingBox();
+  expect(expandedShape.width / expandedShape.height).toBeCloseTo(0.62, 1);
+
+  const viewportOutline = page.locator('.overview-map__viewport');
+  await expect(viewportOutline).toHaveCSS('stroke-width', '1.25px');
+  const viewportShape = await viewportOutline.boundingBox();
+  expect(viewportShape.width).toBeGreaterThanOrEqual(5);
+  expect(viewportShape.height).toBeGreaterThanOrEqual(5);
+  expect(viewportShape.width / viewportShape.height).toBeCloseTo(421 / 478, 1);
+
+  const expandedOverviewBox = await overview.boundingBox();
+  const dragStart = {
+    x: expandedOverviewBox.x + expandedOverviewBox.width * 0.45,
+    y: expandedOverviewBox.y + expandedOverviewBox.height * 0.55
+  };
+  const dragEnd = {
+    x: expandedOverviewBox.x + expandedOverviewBox.width * 0.68,
+    y: expandedOverviewBox.y + expandedOverviewBox.height * 0.62
+  };
+  const viewportBeforeDrag = await viewportOutline.boundingBox();
+  await page.mouse.move(dragStart.x, dragStart.y);
+  await page.mouse.down();
+  await page.mouse.move(dragEnd.x, dragEnd.y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await viewportOutline.boundingBox()).x).not.toBeCloseTo(
+    viewportBeforeDrag.x,
+    1
+  );
+
+  await overviewToggle.click();
+  await expect(overview).not.toHaveClass(/is-expanded/);
+  await expect(overviewToggle).toHaveAttribute('aria-expanded', 'false');
   const resizedMap = await page.locator('#map').evaluate((element) => {
     const canvas = element.querySelector('.leaflet-heatmap-layer');
     return {
