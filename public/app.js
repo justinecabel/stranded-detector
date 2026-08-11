@@ -9,10 +9,6 @@
   const latitudeInput = document.querySelector('#latitude');
   const longitudeInput = document.querySelector('#longitude');
   const reportStatus = document.querySelector('#report-status');
-  const gpsPermissionDialog = document.querySelector('#gps-permission');
-  const allowGpsButton = document.querySelector('#allow-gps');
-  const gpsLaterButton = document.querySelector('#gps-later');
-  const gpsPermissionStatus = document.querySelector('#gps-permission-status');
   const zoomLevelIndicator = document.querySelector('#zoom-level');
   const recenterButton = document.querySelector('#recenter-button');
   const reportControls = document.querySelector('.report-controls');
@@ -235,7 +231,6 @@
   let locationMarker;
   let locationWatchId;
   let gpsZoomLocked = false;
-  let reportAfterPermission = false;
   let followingGps = true;
   let heatSyncFrame;
   let pendingHeatZoom;
@@ -247,6 +242,7 @@
   let historyTimelineCache = new Map();
   let historyTimelineCachedAt = 0;
   let historyTimelinePromise;
+  let historyTimelineUnsupported = false;
   let historyPlaybackTimer;
   let historyRefreshTimer;
   let historyPlaying = false;
@@ -482,6 +478,7 @@
 
   function fetchHistoryTimeline() {
     if (historyCacheIsFresh()) return Promise.resolve(historyTimelineCache);
+    if (historyTimelineUnsupported) return Promise.resolve(historyTimelineCache);
     if (historyTimelinePromise) return historyTimelinePromise;
 
     historyAbortController = new AbortController();
@@ -493,10 +490,15 @@
       { cache: 'no-store', signal: historyAbortController.signal }
     )
       .then((response) => {
+        if (response.status === 400 || response.status === 404) {
+          historyTimelineUnsupported = true;
+          return null;
+        }
         if (!response.ok) throw new Error(`History request failed: ${response.status}`);
         return response.json();
       })
       .then((timeline) => {
+        if (!timeline) return historyTimelineCache;
         const nextCache = new Map();
         for (const snapshot of timeline.snapshots || []) {
           nextCache.set(Number(snapshot.offsetMinutes), snapshot.cells || []);
@@ -510,6 +512,26 @@
       });
 
     return historyTimelinePromise;
+  }
+
+  async function fetchLegacyHistorySnapshot(offsetMinutes) {
+    // Older deployments reject the exact three-hour boundary because the
+    // server clock advances between the browser calculation and validation.
+    const safeOffsetMinutes = Math.min(
+      offsetMinutes,
+      HISTORY_MAX_MINUTES - HISTORY_STEP_MINUTES
+    );
+    const observedAt = Date.now() - safeOffsetMinutes * 60 * 1000;
+    const response = await fetch(
+      apiUrl(`/history?bbox=${encodeURIComponent(philippinesBbox)}&at=${observedAt}`),
+      { cache: 'no-store' }
+    );
+    if (!response.ok) throw new Error(`History request failed: ${response.status}`);
+    const snapshot = await response.json();
+    const cells = snapshot.cells || [];
+    historyTimelineCache.set(offsetMinutes, cells);
+    historyTimelineCachedAt = Date.now();
+    return cells;
   }
 
   async function loadHistory() {
@@ -530,7 +552,16 @@
         historyOffsetMinutes === 0 ||
         historyOffsetMinutes !== requestedOffset
       ) return;
-      displayedHeatCells = timeline.get(requestedOffset) || [];
+      let cells = timeline.get(requestedOffset);
+      if (!cells && historyTimelineUnsupported) {
+        cells = await fetchLegacyHistorySnapshot(requestedOffset);
+      }
+      if (
+        requestId !== historyRequestId ||
+        historyOffsetMinutes === 0 ||
+        historyOffsetMinutes !== requestedOffset
+      ) return;
+      displayedHeatCells = cells || [];
       renderHeatCells(displayedHeatCells);
     } catch (error) {
       if (error.name === 'AbortError') return;
@@ -794,7 +825,11 @@
 
   recenterButton.addEventListener('click', () => {
     if (lastKnownLocation) focusOnGpsLocation(lastKnownLocation);
-    else openGpsPrompt();
+    else requestDeviceLocation({
+      updateMainMap: true,
+      fresh: true,
+      onError: showGpsError
+    });
   });
 
   function updateTrackedLocation(coords) {
@@ -876,7 +911,6 @@
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => acceptCoordinates(coords),
       (error) => {
-        startLocationWatch();
         const reason =
           error.code === error.PERMISSION_DENIED
             ? 'denied'
@@ -893,23 +927,6 @@
     );
   }
 
-  function openGpsPrompt({ forReport = false } = {}) {
-    reportAfterPermission = reportAfterPermission || forReport;
-    gpsPermissionStatus.replaceChildren();
-    allowGpsButton.disabled = false;
-    allowGpsButton.textContent = 'Allow GPS';
-    if (!window.isSecureContext) {
-      gpsPermissionStatus.innerHTML =
-        '<p class="message message--error">GPS requires HTTPS or localhost.</p>';
-    }
-    if (!gpsPermissionDialog.open) gpsPermissionDialog.showModal();
-  }
-
-  function closeGpsPrompt() {
-    reportAfterPermission = false;
-    if (gpsPermissionDialog.open) gpsPermissionDialog.close();
-  }
-
   function postGpsReport(position) {
     reportButton.disabled = true;
     reportButton.dataset.mode = 'submitting';
@@ -921,6 +938,7 @@
   }
 
   function gpsErrorMessage(reason) {
+    if (reason === 'insecure') return 'GPS requires HTTPS or localhost.';
     if (reason === 'outside') return 'Your GPS location is outside the Philippines.';
     if (reason === 'unavailable') return 'Your device could not determine its GPS location.';
     if (reason === 'timeout') return 'GPS timed out. Please try again.';
@@ -928,68 +946,33 @@
     return 'GPS permission was denied. Enable location in browser settings.';
   }
 
-  async function initializeGpsPermission() {
+  function showGpsError(reason) {
+    reportStatus.innerHTML =
+      `<p class="message message--error">${gpsErrorMessage(reason)}</p>`;
+  }
+
+  function initializeGps() {
     if (devGps) {
       requestDeviceLocation({ updateMainMap: true, instantFocus: true });
       return;
     }
 
-    try {
-      if (navigator.permissions) {
-        const permission = await navigator.permissions.query({ name: 'geolocation' });
-        if (permission.state === 'granted') {
-          requestDeviceLocation({ updateMainMap: true, instantFocus: true });
-          return;
-        }
-      }
-    } catch {
-      // Fall back to the app prompt when the Permissions API is unavailable.
-    }
-    openGpsPrompt();
-  }
-
-  allowGpsButton.addEventListener('click', () => {
     if (!window.isSecureContext) {
-      gpsPermissionStatus.innerHTML =
-        '<p class="message message--error">This HTTP preview cannot request GPS. Open the HTTPS version.</p>';
+      showGpsError('insecure');
       return;
     }
-
-    const shouldReport = reportAfterPermission;
-    allowGpsButton.disabled = true;
-    allowGpsButton.textContent = 'Requesting…';
-    gpsPermissionStatus.replaceChildren();
 
     requestDeviceLocation({
       updateMainMap: true,
-      fresh: true,
-      onSuccess: (position) => {
-        closeGpsPrompt();
-        if (shouldReport) postGpsReport(position);
-      },
-      onError: (reason) => {
-        allowGpsButton.disabled = false;
-        allowGpsButton.textContent = 'Allow GPS';
-        gpsPermissionStatus.innerHTML =
-          `<p class="message message--error">${gpsErrorMessage(reason)}</p>`;
-      }
+      instantFocus: true,
+      onError: showGpsError
     });
-  });
+  }
 
-  gpsLaterButton.addEventListener('click', closeGpsPrompt);
-  gpsPermissionDialog.addEventListener('cancel', () => {
-    reportAfterPermission = false;
-  });
-
-  initializeGpsPermission();
+  initializeGps();
 
   function submitGpsReport() {
     reportStatus.replaceChildren();
-    if (!lastKnownLocation) {
-      openGpsPrompt({ forReport: true });
-      return;
-    }
-
     reportButton.disabled = true;
     reportButton.dataset.mode = 'locating';
     reportButton.querySelector('strong').textContent = 'Locating…';
@@ -998,9 +981,7 @@
       onSuccess: postGpsReport,
       onError: (reason) => {
         resetReportButton();
-        openGpsPrompt({ forReport: true });
-        gpsPermissionStatus.innerHTML =
-          `<p class="message message--error">${gpsErrorMessage(reason)}</p>`;
+        showGpsError(reason);
       }
     });
   }

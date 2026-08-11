@@ -43,6 +43,7 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.match(page.text, /Stranded Philippines/);
     assert.match(page.text, /noindex, nofollow/);
     assert.match(page.text, /Philippines overview heatmap and current viewport/);
+    assert.doesNotMatch(page.text, /id="gps-permission"/);
     assert.match(page.text, /rel="manifest" href="\/manifest\.webmanifest"/);
     assert.doesNotMatch(page.text, /id="pwa-install"/);
     assert.match(page.text, /hx-post="\/reports"/);

@@ -66,7 +66,7 @@
     <script src="<%= assets %>/vendor/htmx/htmx.min.js" defer></script>
     <script src="<%= assets %>/vendor/leaflet/leaflet.js" defer></script>
     <script src="<%= assets %>/vendor/leaflet-heat/leaflet-heat.js" defer></script>
-    <script src="<%= assets %>/assets/app.js" defer></script>
+    <script src="<%= assets %>/assets/app.js?v=18" defer></script>
   </head>
   <body
     data-map-tile-url="<%= mapTileUrl %>"
@@ -187,15 +187,6 @@
         <div id="report-status" role="status" aria-live="polite"></div>
       </section>
     </main>
-
-    <dialog class="gps-permission" id="gps-permission" aria-labelledby="gps-permission-title">
-      <h2 id="gps-permission-title">Allow GPS location?</h2>
-      <div class="gps-permission__actions">
-        <button class="button button--allow" id="allow-gps" type="button">Allow GPS</button>
-        <button class="button button--later" id="gps-later" type="button">Not now</button>
-      </div>
-      <div id="gps-permission-status" role="status" aria-live="polite"></div>
-    </dialog>
 
   </body>
 </html>

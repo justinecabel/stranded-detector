@@ -202,15 +202,13 @@ test('denied GPS prevents reporting at 390px', async ({ browser }) => {
   });
 
   await page.goto('/');
-  await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Not now', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toHaveCount(0);
+  await expect(page.locator('#report-status')).toHaveText(/GPS permission was denied/);
   await page.waitForTimeout(500);
   expect(eventRequests).toHaveLength(1);
   expect(eventRequests[0]).toContain('bbox=116.5%2C4.3%2C127%2C21.3');
   await page.getByRole('button', { name: 'I am stranded :(', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Allow GPS', exact: true }).click();
-  await expect(page.locator('#gps-permission-status')).toHaveText(/GPS permission was denied/);
+  await expect(page.locator('#report-status')).toHaveText(/GPS permission was denied/);
   await expect(page.locator('.active-report-state')).toHaveCount(0);
   await expect.poll(() =>
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
@@ -227,12 +225,10 @@ test('allowed GPS outside the Philippines is reported accurately', async ({ brow
   const page = await context.newPage();
 
   await page.goto('/');
+  await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toHaveCount(0);
+  await expect(page.locator('#report-status')).toHaveText(/outside the Philippines/);
   await page.getByRole('button', { name: 'I am stranded :(', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Allow GPS location?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Allow GPS', exact: true }).click();
-  await expect(page.locator('#gps-permission-status')).toHaveText(
-    /outside the Philippines/
-  );
+  await expect(page.locator('#report-status')).toHaveText(/outside the Philippines/);
   await expect(page.locator('.active-report-state')).toHaveCount(0);
   await context.close();
 });
@@ -523,4 +519,53 @@ test('history scrubber reuses one cached timeline request', async ({ page }) => 
   await page.waitForTimeout(150);
 
   expect(historyRequests).toBe(1);
+});
+
+test('history falls back safely when the backend predates timeline batches', async ({ page }) => {
+  let timelineRequests = 0;
+  let legacyRequests = 0;
+  let legacyObservedAt = 0;
+
+  await page.route('**/history?*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('minutes')) {
+      timelineRequests += 1;
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'A valid time within the last three hours is required' })
+      });
+      return;
+    }
+
+    legacyRequests += 1;
+    legacyObservedAt = Number(url.searchParams.get('at'));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        cells: [{ latitude: 14.5995, longitude: 120.9842, people: 3 }]
+      })
+    });
+  });
+
+  await page.goto('/?devGps=manila');
+  const historySlider = page.locator('#history-slider');
+  await historySlider.fill('180');
+
+  await expect.poll(() => timelineRequests).toBe(1);
+  await expect.poll(() => legacyRequests).toBe(1);
+  await expect.poll(() =>
+    page.locator('#map .leaflet-heatmap-layer').getAttribute('data-cell-count')
+  ).toBe('1');
+
+  const fallbackAgeMinutes = (Date.now() - legacyObservedAt) / 60_000;
+  expect(fallbackAgeMinutes).toBeGreaterThanOrEqual(174.9);
+  expect(fallbackAgeMinutes).toBeLessThan(176);
+
+  await historySlider.fill('0');
+  await historySlider.fill('180');
+  await page.waitForTimeout(100);
+  expect(timelineRequests).toBe(1);
+  expect(legacyRequests).toBe(1);
 });

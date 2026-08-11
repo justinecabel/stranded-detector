@@ -570,47 +570,6 @@ button {
   display: none;
 }
 
-.gps-permission {
-  width: min(calc(100% - 2rem), 22rem);
-  padding: 1rem;
-  color: var(--text);
-  background: var(--panel);
-  border: 0;
-  border-radius: 1rem;
-  box-shadow: 0 18px 55px rgba(0, 15, 13, 0.35);
-}
-
-.gps-permission::backdrop {
-  background: rgba(2, 18, 16, 0.55);
-}
-
-.gps-permission h2 {
-  margin: 0 0 0.85rem;
-  font-size: 1rem;
-  text-align: center;
-}
-
-.gps-permission__actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.button--allow {
-  color: white;
-  background: #3b86e8;
-}
-
-.button--later {
-  color: var(--text);
-  background: #e2e5e1;
-}
-
-.gps-permission .message {
-  margin: 0.65rem 0 0;
-  box-shadow: none;
-}
-
 .skip-link,
 .sr-only {
   position: absolute;
