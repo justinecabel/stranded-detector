@@ -291,6 +291,34 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   const heatLayer = page.locator('#map .leaflet-heatmap-layer');
   await expect(heatLayer).toHaveCount(1);
   await expect(page.locator('#overview-map .leaflet-heatmap-layer')).toHaveCount(1);
+  await page.locator('#report-button').click();
+  await expect(page.locator('.active-report-state')).toHaveCount(1);
+  await expect.poll(() => heatLayer.getAttribute('data-cell-count')).toBe('1');
+
+  const heatOffsetFromGps = () => heatLayer.evaluate((canvas) => {
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let alphaTotal = 0;
+    let xTotal = 0;
+    let yTotal = 0;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const alpha = pixels[(y * canvas.width + x) * 4 + 3];
+        alphaTotal += alpha;
+        xTotal += x * alpha;
+        yTotal += y * alpha;
+      }
+    }
+    const canvasBox = canvas.getBoundingClientRect();
+    const gpsBox = document.querySelector('.user-location-marker').getBoundingClientRect();
+    const heatX = canvasBox.left + xTotal / alphaTotal * canvasBox.width / canvas.width;
+    const heatY = canvasBox.top + yTotal / alphaTotal * canvasBox.height / canvas.height;
+    return {
+      x: heatX - (gpsBox.left + gpsBox.width / 2),
+      y: heatY - (gpsBox.top + gpsBox.height / 2)
+    };
+  });
+
+  const offsetBeforeDrag = await heatOffsetFromGps();
   const heatTransformBeforeDrag = await heatLayer.evaluate((element) => element.style.transform);
 
   await page.mouse.move(195, 360);
@@ -299,9 +327,18 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
   const heatTransformDuringDrag = await heatLayer.evaluate((element) => element.style.transform);
   expect(heatTransformDuringDrag).toBe(heatTransformBeforeDrag);
+  const offsetDuringDrag = await heatOffsetFromGps();
+  expect(offsetDuringDrag.x).toBeCloseTo(offsetBeforeDrag.x, 1);
+  expect(offsetDuringDrag.y).toBeCloseTo(offsetBeforeDrag.y, 1);
 
   await page.mouse.up();
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
+  await expect.poll(async () =>
+    Math.abs((await heatOffsetFromGps()).x - offsetBeforeDrag.x)
+  ).toBeLessThanOrEqual(1.1);
+  await expect.poll(async () =>
+    Math.abs((await heatOffsetFromGps()).y - offsetBeforeDrag.y)
+  ).toBeLessThanOrEqual(1.1);
 
   await page.setViewportSize({ width: 421, height: 478 });
   const overview = page.locator('.overview-map');

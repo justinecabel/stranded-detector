@@ -233,7 +233,6 @@
   let gpsZoomLocked = false;
   let followingGps = true;
   let heatSyncFrame;
-  let pendingHeatZoom;
   let mapResizeFrame;
   let displayedHeatCells = [];
   let historyOffsetMinutes = 0;
@@ -623,13 +622,10 @@
     });
   }
 
-  function syncHeatmapToMap(event) {
-    if (Number.isFinite(event?.zoom)) pendingHeatZoom = event.zoom;
+  function syncMapOverlays() {
     if (heatSyncFrame !== undefined) return;
     heatSyncFrame = requestAnimationFrame(() => {
       heatSyncFrame = undefined;
-      updateHeatmapScale(pendingHeatZoom);
-      pendingHeatZoom = undefined;
       updateOverviewViewport();
     });
   }
@@ -760,12 +756,12 @@
   window.visualViewport?.addEventListener('resize', resizeMaps);
 
   map.on('moveend', () => {
-    syncHeatmapToMap();
+    syncMapOverlays();
     updateRecenterButton();
   });
-  map.on('move', syncHeatmapToMap);
+  map.on('move', syncMapOverlays);
   map.on('resize', () => {
-    syncHeatmapToMap();
+    syncMapOverlays();
     positionHistoryTimeLabel();
     if (!followingGps || !gpsZoomLocked || !lastKnownLocation) return;
     requestAnimationFrame(() => {
@@ -799,21 +795,23 @@
 
   function beginZoom() {
     showZoomLevel();
-    syncHeatmapToMap();
   }
 
   function finishZoom() {
-    syncHeatmapToMap();
+    updateHeatmapScale();
+    syncMapOverlays();
     if (devGps) hideZoomLevelSoon();
   }
 
   map.on('zoomstart', beginZoom);
   map.on('zoom', () => {
     showZoomLevel();
-    syncHeatmapToMap();
+    syncMapOverlays();
   });
-  map.on('zoomanim', syncHeatmapToMap);
+  map.on('zoomanim', syncMapOverlays);
   map.on('zoomend', finishZoom);
+
+  updateHeatmapScale();
 
   historySlider.addEventListener('input', () => {
     if (historyPlaying) stopHistoryPlayback();
@@ -837,7 +835,6 @@
     if (!isInPhilippines(position)) return;
     lastKnownLocation = position;
     showLocationIndicator(position);
-    renderHeatCells();
 
     if (followingGps && gpsZoomLocked) {
       map.panTo(gpsAwareMapCenter(position), {
@@ -883,7 +880,6 @@
 
       lastKnownLocation = position;
       showLocationIndicator(position);
-      renderHeatCells();
       if (updateMainMap) {
         focusOnGpsLocation(position, { animate: !instantFocus });
       } else if (followingGps && gpsZoomLocked) {
