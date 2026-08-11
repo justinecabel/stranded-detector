@@ -13,9 +13,9 @@ const projectRoot = path.resolve(scriptDirectory, '..');
 const outputDirectory = path.join(projectRoot, 'dist');
 const backendValue = process.env.BACKEND_URL?.trim();
 const siteValue = process.env.SITE_URL?.trim();
-const seoTitle = 'Stranded Philippines – Live Stranded Reports & Heatmap';
+const seoTitle = 'Stranded Philippines – Live Reports & Heatmap';
 const seoDescription =
-  'View anonymous, short-lived reports of stranded people across the Philippines on a live heatmap. Report your location and mark yourself safe.';
+  'View live, anonymous reports of stranded people across the Philippines on a three-hour heatmap. Report your GPS location and mark yourself safe.';
 
 if (!backendValue) {
   throw new Error('BACKEND_URL is required, for example https://stranded-detector.example.ts.net');
@@ -42,6 +42,8 @@ if (
 }
 siteUrl.pathname = `${siteUrl.pathname.replace(/\/+$/, '')}/`;
 const canonicalUrl = siteUrl.href;
+const socialImageUrl = new URL('social-preview.png', canonicalUrl).href;
+const appIconUrl = new URL('icons/app-icon-512.png', canonicalUrl).href;
 
 const structuredData = JSON.stringify({
   '@context': 'https://schema.org',
@@ -50,6 +52,7 @@ const structuredData = JSON.stringify({
       '@type': 'WebSite',
       '@id': `${canonicalUrl}#website`,
       name: 'Stranded Philippines',
+      alternateName: 'Stranded PH',
       url: canonicalUrl,
       description: seoDescription,
       inLanguage: 'en-PH',
@@ -59,15 +62,49 @@ const structuredData = JSON.stringify({
       }
     },
     {
+      '@type': 'ImageObject',
+      '@id': `${canonicalUrl}#social-image`,
+      contentUrl: socialImageUrl,
+      width: 1200,
+      height: 630,
+      caption: 'Stranded Philippines live community reports and heatmap'
+    },
+    {
+      '@type': 'WebPage',
+      '@id': `${canonicalUrl}#webpage`,
+      name: seoTitle,
+      url: canonicalUrl,
+      description: seoDescription,
+      inLanguage: 'en-PH',
+      isPartOf: { '@id': `${canonicalUrl}#website` },
+      about: { '@id': `${canonicalUrl}#application` },
+      primaryImageOfPage: { '@id': `${canonicalUrl}#social-image` }
+    },
+    {
       '@type': 'WebApplication',
       '@id': `${canonicalUrl}#application`,
       name: 'Stranded Philippines',
       url: canonicalUrl,
       description: seoDescription,
-      applicationCategory: 'SafetyApplication',
+      applicationCategory: 'UtilitiesApplication',
       operatingSystem: 'Any',
       browserRequirements: 'Requires JavaScript and location access for reporting',
       isAccessibleForFree: true,
+      installUrl: canonicalUrl,
+      image: appIconUrl,
+      screenshot: socialImageUrl,
+      mainEntityOfPage: { '@id': `${canonicalUrl}#webpage` },
+      offers: {
+        '@type': 'Offer',
+        price: 0,
+        priceCurrency: 'PHP'
+      },
+      featureList: [
+        'Live Philippines stranded-person heatmap',
+        'Anonymous GPS-based community reports',
+        'Three-hour report history',
+        'Mark yourself safe'
+      ],
       inLanguage: 'en-PH',
       areaServed: {
         '@type': 'Country',
@@ -86,6 +123,12 @@ await mkdir(outputDirectory, { recursive: true });
 const copies = [
   ['public/styles.css', 'assets/styles.css'],
   ['public/app.js', 'assets/app.js'],
+  ['public/manifest.webmanifest', 'manifest.webmanifest'],
+  ['public/service-worker.js', 'service-worker.js'],
+  ['public/offline.html', 'offline.html'],
+  ['public/icons', 'icons'],
+  ['public/social-preview.svg', 'social-preview.svg'],
+  ['public/social-preview.png', 'social-preview.png'],
   ['node_modules/htmx.org/dist/htmx.min.js', 'vendor/htmx/htmx.min.js'],
   ['node_modules/leaflet/dist/leaflet.css', 'vendor/leaflet/leaflet.css'],
   ['node_modules/leaflet/dist/leaflet.js', 'vendor/leaflet/leaflet.js'],
@@ -125,7 +168,8 @@ const html = await ejs.renderFile(path.join(projectRoot, 'views/index.ejs'), {
   seoDescription,
   canonicalUrl,
   allowIndexing: true,
-  structuredData
+  structuredData,
+  socialImageUrl
 });
 
 const sitemapUrl = new URL('sitemap.xml', canonicalUrl).href;
@@ -136,9 +180,15 @@ const escapeXml = (value) => value
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&apos;');
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>${escapeXml(canonicalUrl)}</loc>
+    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
+    <image:image>
+      <image:loc>${escapeXml(socialImageUrl)}</image:loc>
+      <image:title>Stranded Philippines live reports and heatmap</image:title>
+    </image:image>
   </url>
 </urlset>
 `;

@@ -172,6 +172,25 @@ test('GPS-only self-report works at 320px with touch-sized controls', async ({ b
   await context.close();
 });
 
+test('PWA is installable without overriding the browser install prompt', async ({ page }) => {
+  await page.goto('/?devGps=manila');
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+    'href',
+    '/manifest.webmanifest'
+  );
+  await expect.poll(() => page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return new URL(registration.scope).pathname;
+  })).toBe('/');
+  await expect(page.getByRole('button', { name: 'Install', exact: true })).toHaveCount(0);
+  const browserPromptWasPrevented = await page.evaluate(() => {
+    const installEvent = new Event('beforeinstallprompt', { cancelable: true });
+    window.dispatchEvent(installEvent);
+    return installEvent.defaultPrevented;
+  });
+  expect(browserPromptWasPrevented).toBe(false);
+});
+
 test('denied GPS prevents reporting at 390px', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }
@@ -254,10 +273,12 @@ test('My Location returns to the simulated GPS location', async ({ browser }) =>
   expect(locationButtonBox.x - (reportButtonBox.x + reportButtonBox.width)).toBeCloseTo(8, 1);
   expect(locationButtonBox.y).toBeCloseTo(reportButtonBox.y, 1);
 
+  const recenterStartedAt = Date.now();
   await recenterButton.click();
   await expect(recenterButton).toBeVisible();
   await expect(page.locator('.user-location-marker')).toBeVisible();
-  await expect.poll(visualCenterError).toBeLessThan(2);
+  await expect.poll(visualCenterError, { intervals: [25, 50, 75] }).toBeLessThan(2);
+  expect(Date.now() - recenterStartedAt).toBeLessThanOrEqual(650);
 
   await page.setViewportSize({ width: 390, height: 700 });
   await expect.poll(visualCenterError).toBeLessThan(2);
@@ -398,6 +419,19 @@ test('development GPS query simulates Manila without browser permission', async 
   await expect(reportButton).toHaveText('Click again to mark yourself safe');
   await expect(page.locator('.active-report-state')).toHaveCount(1);
   await context.close();
+});
+
+test('GPS map supports the zoom 10 to 20 navigation range', async ({ page }) => {
+  await page.goto('/?devGps=manila');
+  await page.mouse.move(200, 240);
+  for (let step = 0; step < 12; step += 1) {
+    await page.mouse.wheel(0, 1000);
+    await page.waitForTimeout(350);
+  }
+  await expect(page.locator('#zoom-level')).toHaveText('Zoom 10');
+  await page.mouse.wheel(0, 1000);
+  await page.waitForTimeout(400);
+  await expect(page.locator('#zoom-level')).toHaveText('Zoom 10');
 });
 
 test('history label uses the free viewport margin at wide widths', async ({ browser }) => {

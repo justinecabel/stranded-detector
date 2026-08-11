@@ -43,6 +43,8 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.match(page.text, /Stranded Philippines/);
     assert.match(page.text, /noindex, nofollow/);
     assert.match(page.text, /Philippines overview heatmap and current viewport/);
+    assert.match(page.text, /rel="manifest" href="\/manifest\.webmanifest"/);
+    assert.doesNotMatch(page.text, /id="pwa-install"/);
     assert.match(page.text, /hx-post="\/reports"/);
     assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
     assert.match(page.headers['set-cookie'][0], /HttpOnly/);
@@ -58,6 +60,14 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     await request(system.app)
       .get('/vendor/leaflet-heat/leaflet-heat.js')
       .expect(200);
+    const manifest = await request(system.app).get('/manifest.webmanifest').expect(200);
+    assert.equal(manifest.body.name, 'Stranded Philippines');
+    assert.equal(manifest.body.display, 'standalone');
+    assert.equal(manifest.body.icons.length, 3);
+    const serviceWorker = await request(system.app).get('/service-worker.js').expect(200);
+    assert.match(serviceWorker.text, /NETWORK_ONLY_PATHS/);
+    assert.equal(serviceWorker.headers['service-worker-allowed'], '/');
+    await request(system.app).get('/icons/app-icon-192.png').expect(200);
   } finally {
     system.destroy();
   }

@@ -2,14 +2,22 @@
 <html lang="en-PH">
   <% const assets = typeof assetBaseUrl === 'string' ? assetBaseUrl : ''; %>
   <% const apiBase = typeof apiBaseUrl === 'string' ? apiBaseUrl : ''; %>
-  <% const pageTitle = typeof seoTitle === 'string' ? seoTitle : 'Stranded Philippines – Live Stranded Reports & Heatmap'; %>
-  <% const pageDescription = typeof seoDescription === 'string' ? seoDescription : 'View anonymous, short-lived reports of stranded people across the Philippines on a live heatmap. Report your location and mark yourself safe.'; %>
+  <% const pageTitle = typeof seoTitle === 'string' ? seoTitle : 'Stranded Philippines – Live Reports & Heatmap'; %>
+  <% const pageDescription = typeof seoDescription === 'string' ? seoDescription : 'View live, anonymous reports of stranded people across the Philippines on a three-hour heatmap. Report your GPS location and mark yourself safe.'; %>
   <% const pageUrl = typeof canonicalUrl === 'string' ? canonicalUrl : ''; %>
+  <% const socialImage = typeof socialImageUrl === 'string' ? socialImageUrl : ''; %>
   <% const canIndex = typeof allowIndexing === 'boolean' ? allowIndexing : false; %>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#091b19">
+    <meta name="application-name" content="Stranded Philippines">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Stranded PH">
+    <meta name="geo.region" content="PH">
+    <meta name="geo.placename" content="Philippines">
     <meta
       name="description"
       content="<%= pageDescription %>"
@@ -20,12 +28,24 @@
     <meta property="og:locale" content="en_PH">
     <meta property="og:title" content="<%= pageTitle %>">
     <meta property="og:description" content="<%= pageDescription %>">
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="<%= socialImage ? 'summary_large_image' : 'summary' %>">
     <meta name="twitter:title" content="<%= pageTitle %>">
     <meta name="twitter:description" content="<%= pageDescription %>">
     <% if (pageUrl) { %>
       <link rel="canonical" href="<%= pageUrl %>">
+      <link rel="alternate" hreflang="en-PH" href="<%= pageUrl %>">
+      <link rel="alternate" hreflang="x-default" href="<%= pageUrl %>">
       <meta property="og:url" content="<%= pageUrl %>">
+    <% } %>
+    <% if (socialImage) { %>
+      <meta property="og:image" content="<%= socialImage %>">
+      <meta property="og:image:secure_url" content="<%= socialImage %>">
+      <meta property="og:image:type" content="image/png">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
+      <meta property="og:image:alt" content="Stranded Philippines live community reports and heatmap">
+      <meta name="twitter:image" content="<%= socialImage %>">
+      <meta name="twitter:image:alt" content="Stranded Philippines live community reports and heatmap">
     <% } %>
     <% if (staticContentSecurityPolicy) { %>
       <meta http-equiv="Content-Security-Policy" content="<%= staticContentSecurityPolicy %>">
@@ -37,6 +57,9 @@
     <% if (structuredData) { %>
       <script type="application/ld+json"><%- structuredData %></script>
     <% } %>
+    <link rel="manifest" href="<%= assets %>/manifest.webmanifest">
+    <link rel="icon" href="<%= assets %>/icons/app-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="<%= assets %>/icons/app-icon-192.png">
     <link rel="stylesheet" href="<%= assets %>/vendor/leaflet/leaflet.css">
     <link rel="stylesheet" href="<%= assets %>/assets/styles.css">
     <script src="<%= assets %>/vendor/htmx/htmx.min.js" defer></script>
@@ -172,5 +195,6 @@
       </div>
       <div id="gps-permission-status" role="status" aria-live="polite"></div>
     </dialog>
+
   </body>
 </html>

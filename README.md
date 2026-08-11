@@ -141,6 +141,16 @@ app is marked `noindex` so it does not compete with the Pages URL in search.
 For a local static build, set both `BACKEND_URL` and `SITE_URL` before running
 `npm.cmd run build:pages`.
 
+### Install as an app
+
+The frontend is an installable Progressive Web App on HTTPS deployments and
+localhost. Use the browser's native install request or install command. On
+iPhone and iPad, tap **Share**, then **Add to Home Screen**.
+
+The service worker caches only the local interface and an offline explanation
+page. Live reports, report history, event streams, and map tiles require a
+network connection and are never served from the PWA cache.
+
 CARTO's dark raster tiles are displayed in muted monochrome so land, roads,
 and place labels remain visible without competing with the heat layer. Before meaningful production traffic,
 confirm the provider terms or set `MAP_TILE_URL` and `MAP_ATTRIBUTION` to

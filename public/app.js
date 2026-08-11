@@ -26,8 +26,9 @@
   const ACTIVE_REPORT_BUTTON_LABEL = 'Click again to mark yourself safe';
   const COOLDOWN_BUTTON_LABEL = 'Relax!';
   const HEAT_SCALE_MAX = 1;
-  const GPS_MIN_ZOOM = 14;
+  const GPS_MIN_ZOOM = 10;
   const GPS_DEFAULT_ZOOM = 20;
+  const GPS_TRANSITION_SECONDS = 0.45;
   const HISTORY_MAX_MINUTES = 180;
   const HISTORY_STEP_MINUTES = 5;
   const DEVICE_TOKEN_STORAGE_KEY = 'stranded-detector-device-token';
@@ -273,7 +274,9 @@
         gpsZoomLocked = true;
       });
     }
-    map.flyTo(centeredPosition, GPS_DEFAULT_ZOOM);
+    map.flyTo(centeredPosition, GPS_DEFAULT_ZOOM, {
+      duration: GPS_TRANSITION_SECONDS
+    });
   }
 
   function heatmapWeight(count) {
@@ -645,7 +648,10 @@
     renderHeatCells();
 
     if (followingGps && gpsZoomLocked) {
-      map.panTo(gpsAwareMapCenter(position), { animate: true });
+      map.panTo(gpsAwareMapCenter(position), {
+        animate: true,
+        duration: GPS_TRANSITION_SECONDS
+      });
     } else {
       updateRecenterButton();
     }
@@ -689,7 +695,10 @@
       if (updateMainMap) {
         focusOnGpsLocation(position, { animate: !instantFocus });
       } else if (followingGps && gpsZoomLocked) {
-        map.panTo(gpsAwareMapCenter(position), { animate: true });
+        map.panTo(gpsAwareMapCenter(position), {
+          animate: true,
+          duration: GPS_TRANSITION_SECONDS
+        });
       } else {
         updateRecenterButton();
       }
@@ -1050,6 +1059,19 @@
     // applied the policy before making the first Funnel request.
     window.addEventListener('DOMContentLoaded', loadActiveReportsFromApi, { once: true });
   }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const manifestLink = document.querySelector('link[rel="manifest"]');
+      const pwaRoot = new URL('./', manifestLink.href);
+      const serviceWorkerUrl = new URL('service-worker.js', pwaRoot);
+      navigator.serviceWorker.register(serviceWorkerUrl, { scope: pwaRoot.pathname })
+        .catch(() => {
+          // Installation remains available through the browser menu if registration fails.
+        });
+    }, { once: true });
+  }
+
   startCountdowns();
 
   window.addEventListener('beforeunload', () => {

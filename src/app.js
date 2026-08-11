@@ -123,6 +123,23 @@ export function createApplication({
       crossOriginEmbedderPolicy: false
     })
   );
+  app.get('/manifest.webmanifest', (req, res) => {
+    res.type('application/manifest+json');
+    res.sendFile(path.join(projectRoot, 'public', 'manifest.webmanifest'));
+  });
+  app.get('/service-worker.js', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    res.set('Service-Worker-Allowed', '/');
+    res.type('application/javascript');
+    res.sendFile(path.join(projectRoot, 'public', 'service-worker.js'));
+  });
+  app.get('/offline.html', (req, res) => {
+    res.sendFile(path.join(projectRoot, 'public', 'offline.html'));
+  });
+  app.use('/icons', express.static(path.join(projectRoot, 'public', 'icons'), {
+    immutable: true,
+    maxAge: '1y'
+  }));
   app.use(cookieParser(config.cookieSecret));
   app.use(allowConfiguredFrontendOrigins(config));
   app.use(express.urlencoded({ extended: false, limit: '10kb' }));
@@ -175,7 +192,8 @@ export function createApplication({
       staticContentSecurityPolicy: '',
       allowIndexing: false,
       canonicalUrl: '',
-      structuredData: ''
+      structuredData: '',
+      socialImageUrl: ''
     });
   });
 

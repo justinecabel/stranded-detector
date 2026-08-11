@@ -559,7 +559,8 @@ button {
 }
 
 .button:focus-visible,
-.button--report:focus-visible {
+.button--report:focus-visible,
+.overview-map__toggle:focus-visible {
   outline: 3px solid #ffd34f;
   outline-offset: 2px;
 }
