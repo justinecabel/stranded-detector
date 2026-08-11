@@ -49,7 +49,7 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.match(page.text, /hx-post="\/reports"/);
     assert.match(
       page.text,
-      /src="https:\/\/docker-observo-dev\.tailde68a\.ts\.net\/sdk\.js"[^>]*data-site-id="stranded-detector"/s
+      /src="https:\/\/docker-observo-dev\.tailde68a\.ts\.net\/sdk\.js"[^>]*data-site-id="justsite"/s
     );
     assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow');
     assert.match(page.headers['set-cookie'][0], /HttpOnly/);
