@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'stranded-philippines-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v7`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v15`;
 const APP_SHELL = [
   './offline.html',
   './manifest.webmanifest',
@@ -12,8 +12,10 @@ const APP_SHELL = [
   './vendor/leaflet/images/marker-icon.png',
   './vendor/leaflet/images/marker-icon-2x.png',
   './vendor/leaflet/images/marker-shadow.png',
-  './icons/app-icon-192.png',
-  './icons/app-icon-512.png'
+  './icons/radar-icon-192.png',
+  './icons/radar-icon-512.png',
+  './icons/radar-maskable-512.png',
+  './icons/apple-touch-icon-180.png'
 ];
 const NETWORK_ONLY_PATHS = ['/events', '/history', '/reports', '/healthz'];
 

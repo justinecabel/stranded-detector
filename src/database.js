@@ -149,6 +149,21 @@ export function openDatabase(databasePath) {
       GROUP BY latitude, longitude
       ORDER BY latitude, longitude
     `),
+    historyIntervalsInBounds: db.prepare(`
+      SELECT
+        latitude,
+        longitude,
+        started_at AS startedAt,
+        ended_at AS endedAt
+      FROM report_history
+      WHERE started_at <= @to
+        AND (ended_at IS NULL OR ended_at > @from)
+        AND longitude >= @west
+        AND longitude <= @east
+        AND latitude >= @south
+        AND latitude <= @north
+      ORDER BY latitude, longitude, started_at
+    `),
     health: db.prepare('SELECT 1 AS healthy')
   };
 
@@ -249,6 +264,32 @@ export function openDatabase(databasePath) {
     },
     historyCells(bbox, at = Date.now()) {
       return statements.historyLocationsInBounds.all({ ...bbox, at });
+    },
+    historyTimeline(bbox, from, to, stepMs) {
+      const intervals = statements.historyIntervalsInBounds.all({ ...bbox, from, to });
+      const snapshots = [];
+
+      for (let observedAt = to; observedAt >= from; observedAt -= stepMs) {
+        const locations = new Map();
+        for (const interval of intervals) {
+          if (
+            interval.startedAt > observedAt ||
+            (interval.endedAt !== null && interval.endedAt <= observedAt)
+          ) continue;
+
+          const key = `${interval.latitude}:${interval.longitude}`;
+          const existing = locations.get(key);
+          if (existing) existing.count += 1;
+          else locations.set(key, {
+            latitude: interval.latitude,
+            longitude: interval.longitude,
+            count: 1
+          });
+        }
+        snapshots.push({ observedAt, cells: Array.from(locations.values()) });
+      }
+
+      return snapshots;
     },
     isHealthy() {
       return statements.health.get().healthy === 1;

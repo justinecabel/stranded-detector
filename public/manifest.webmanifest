@@ -5,8 +5,8 @@
   "description": "View anonymous, short-lived reports of stranded people across the Philippines on a live heatmap.",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "any",
   "background_color": "#071715",
   "theme_color": "#091b19",
@@ -14,22 +14,23 @@
   "lang": "en-PH",
   "icons": [
     {
-      "src": "./icons/app-icon-192.png",
+      "src": "./icons/radar-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/app-icon-512.png",
+      "src": "./icons/radar-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/app-icon-512.png",
+      "src": "./icons/radar-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }

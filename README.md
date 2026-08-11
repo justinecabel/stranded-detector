@@ -147,9 +147,17 @@ The frontend is an installable Progressive Web App on HTTPS deployments and
 localhost. Use the browser's native install request or install command. On
 iPhone and iPad, tap **Share**, then **Add to Home Screen**.
 
+When launched from an installed icon, the manifest requests fullscreen mode
+and falls back to standalone mode where fullscreen PWAs are not supported. The
+radar-and-heatmap logo is supplied as standard, maskable, and Apple touch icons.
+
 The service worker caches only the local interface and an offline explanation
 page. Live reports, report history, event streams, and map tiles require a
 network connection and are never served from the PWA cache.
+
+The three-hour history is fetched as one five-minute timeline and reused from
+an in-memory cache while scrubbing or playing. It refreshes after 60 seconds;
+individual slider positions do not create separate requests.
 
 CARTO's dark raster tiles are displayed in muted monochrome so land, roads,
 and place labels remain visible without competing with the heat layer. Before meaningful production traffic,
@@ -184,6 +192,10 @@ You can use any valid Philippines coordinate pair instead, for example
 `http://localhost:3000/?devGps=14.5995,120.9842`. The dummy location uses the
 normal GPS marker, recenter button, heatmap, and report flow. It is enabled by
 default outside production and disabled by default in production.
+
+Append `&devHeat=100` to add 100 deterministic, non-persistent dummy reports
+around Metro Manila for checking heatmap density and collision behavior. For
+example: `http://localhost:3000/?devGps=manila&devHeat=100`.
 
 ## Data and abuse controls
 

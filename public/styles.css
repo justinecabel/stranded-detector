@@ -154,10 +154,6 @@ button {
   filter: grayscale(1) contrast(1.08);
 }
 
-#map.is-zooming .leaflet-heatmap-layer {
-  opacity: 0;
-}
-
 .user-location-marker {
   display: grid;
   width: 28px !important;

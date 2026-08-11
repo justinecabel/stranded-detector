@@ -25,16 +25,17 @@
   const REPORT_BUTTON_LABEL = 'I am stranded :(';
   const ACTIVE_REPORT_BUTTON_LABEL = 'Click again to mark yourself safe';
   const COOLDOWN_BUTTON_LABEL = 'Relax!';
-  const HEAT_SCALE_MAX = 1;
+  const HEAT_SCALE_MAX = 100;
   const GPS_MIN_ZOOM = 10;
   const GPS_DEFAULT_ZOOM = 20;
   const GPS_TRANSITION_SECONDS = 0.45;
   const HISTORY_MAX_MINUTES = 180;
   const HISTORY_STEP_MINUTES = 5;
+  const HISTORY_CACHE_TTL_MS = 60_000;
   const DEVICE_TOKEN_STORAGE_KEY = 'stranded-detector-device-token';
   const HEAT_GRADIENT = {
-    0.2: '#f97316',
-    0.4: '#fb923c',
+    0.2: '#f59e0b',
+    0.4: '#f97316',
     0.6: '#ef4444',
     0.8: '#dc2626',
     1: '#7f1d1d'
@@ -114,7 +115,45 @@
     return { latitude, longitude, accuracy: 12 };
   }
 
+  function readDevHeatCount() {
+    if (!devGpsEnabled) return 0;
+    const value = new URLSearchParams(window.location.search).get('devHeat');
+    if (!/^\d+$/.test(value || '')) return 0;
+    return Math.min(500, Math.max(0, Number(value)));
+  }
+
+  function createDevHeatCells(count) {
+    const clusters = [
+      [14.5995, 120.9842, 0.42],
+      [14.676, 121.0437, 0.68],
+      [14.5547, 121.0244, 0.84],
+      [14.5378, 120.9896, 0.94],
+      [14.6507, 120.9668, 1]
+    ];
+    const usedPerCluster = Array(clusters.length).fill(0);
+
+    return Array.from({ length: count }, (_, index) => {
+      const progress = (index + 0.5) / count;
+      const clusterIndex = clusters.findIndex((cluster) => progress <= cluster[2]);
+      const [centerLatitude, centerLongitude] = clusters[clusterIndex];
+      const localIndex = usedPerCluster[clusterIndex]++;
+      const angle = localIndex * 2.399963229728653 + clusterIndex * 0.7;
+      const distanceKm = 0.08 + Math.sqrt(localIndex + 1) * 0.11;
+      const latitudeOffset = Math.cos(angle) * distanceKm / 111;
+      const longitudeOffset = Math.sin(angle) * distanceKm
+        / (111 * Math.cos(centerLatitude * Math.PI / 180));
+
+      return {
+        latitude: centerLatitude + latitudeOffset,
+        longitude: centerLongitude + longitudeOffset,
+        count: 1
+      };
+    });
+  }
+
   const devGps = readDevGps();
+  const devHeatCount = readDevHeatCount();
+  const devHeatCells = createDevHeatCells(devHeatCount);
   document.documentElement.classList.toggle('is-dev-gps', Boolean(devGps));
 
   const map = L.map('map', {
@@ -136,9 +175,9 @@
   const heatLayer = L.heatLayer([], {
     radius: 34,
     blur: 24,
-    minOpacity: 0.28,
+    minOpacity: 0.08,
     max: HEAT_SCALE_MAX,
-    maxZoom: 20,
+    maxZoom: GPS_MIN_ZOOM,
     gradient: HEAT_GRADIENT
   }).addTo(map);
 
@@ -169,9 +208,9 @@
   const overviewHeatLayer = L.heatLayer([], {
     radius: 12,
     blur: 9,
-    minOpacity: 0.36,
+    minOpacity: 0.08,
     max: HEAT_SCALE_MAX,
-    maxZoom: 7,
+    maxZoom: 3,
     gradient: HEAT_GRADIENT
   }).addTo(overviewMap);
   const overviewViewport = L.rectangle(map.getBounds(), {
@@ -199,14 +238,19 @@
   let reportAfterPermission = false;
   let followingGps = true;
   let heatSyncFrame;
+  let pendingHeatZoom;
   let mapResizeFrame;
   let displayedHeatCells = [];
   let historyOffsetMinutes = 0;
   let historyRequestId = 0;
   let historyAbortController;
+  let historyTimelineCache = new Map();
+  let historyTimelineCachedAt = 0;
+  let historyTimelinePromise;
   let historyPlaybackTimer;
   let historyRefreshTimer;
   let historyPlaying = false;
+  let heatStyleZoom;
   let overviewExpanded = false;
   let overviewPointerId;
   let overviewPointerMoved = false;
@@ -282,16 +326,64 @@
   function heatmapWeight(count) {
     const value = Number(count);
     if (!Number.isFinite(value) || value <= 0) return 0;
-    if (value >= 100) return 1;
-    if (value >= 25) return 0.8;
-    if (value >= 10) return 0.6;
-    if (value >= 4) return 0.4;
-    return 0.2;
+    const capped = Math.min(value, HEAT_SCALE_MAX);
+    if (capped < 4) return 20 + (capped - 1) / 3 * 20;
+    if (capped < 10) return 40 + (capped - 4) / 6 * 20;
+    if (capped < 25) return 60 + (capped - 10) / 15 * 20;
+    return 80 + (capped - 25) / 75 * 20;
+  }
+
+  function aggregateHeatCells(cells, targetMap, radius, blur) {
+    const zoom = targetMap.getZoom();
+    const cellSize = Math.max(1, (radius + blur) / 2);
+    const grid = new Map();
+
+    for (const cell of cells) {
+      const count = Number(cell.count);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      const point = targetMap.project([cell.latitude, cell.longitude], zoom);
+      const key = `${Math.floor(point.x / cellSize)}:${Math.floor(point.y / cellSize)}`;
+      const cluster = grid.get(key) || {
+        latitudeTotal: 0,
+        longitudeTotal: 0,
+        count: 0
+      };
+      cluster.latitudeTotal += Number(cell.latitude) * count;
+      cluster.longitudeTotal += Number(cell.longitude) * count;
+      cluster.count += count;
+      grid.set(key, cluster);
+    }
+
+    return Array.from(grid.values(), (cluster) => ({
+      latitude: cluster.latitudeTotal / cluster.count,
+      longitude: cluster.longitudeTotal / cluster.count,
+      count: cluster.count
+    }));
   }
 
   function renderHeatCells(cells = historyOffsetMinutes === 0 ? latestHeatCells : displayedHeatCells) {
-    const visibleCells = cells.map((cell) => ({ ...cell }));
-    const heatPoints = visibleCells.map((cell) => [
+    const visibleCells = [
+      ...cells.map((cell) => ({ ...cell })),
+      ...devHeatCells
+    ];
+    const mainClusters = aggregateHeatCells(
+      visibleCells,
+      map,
+      heatLayer.options.radius,
+      heatLayer.options.blur
+    );
+    const overviewClusters = aggregateHeatCells(
+      visibleCells,
+      overviewMap,
+      overviewHeatLayer.options.radius,
+      overviewHeatLayer.options.blur
+    );
+    const heatPoints = mainClusters.map((cell) => [
+      cell.latitude,
+      cell.longitude,
+      heatmapWeight(cell.count)
+    ]);
+    const overviewHeatPoints = overviewClusters.map((cell) => [
       cell.latitude,
       cell.longitude,
       heatmapWeight(cell.count)
@@ -300,11 +392,17 @@
     heatLayer.setOptions({ max: HEAT_SCALE_MAX });
     heatLayer.setLatLngs(heatPoints);
     overviewHeatLayer.setOptions({ max: HEAT_SCALE_MAX });
-    overviewHeatLayer.setLatLngs(heatPoints);
+    overviewHeatLayer.setLatLngs(overviewHeatPoints);
 
-    map.getContainer()
-      .querySelector('.leaflet-heatmap-layer')
-      ?.setAttribute('data-cell-count', String(visibleCells.length));
+    const heatCanvas = map.getContainer().querySelector('.leaflet-heatmap-layer');
+    heatCanvas?.setAttribute('data-cell-count', String(visibleCells.length));
+    heatCanvas?.setAttribute('data-cluster-count', String(mainClusters.length));
+    heatCanvas?.setAttribute(
+      'data-peak-count',
+      String(Math.max(0, ...mainClusters.map((cell) => cell.count)))
+    );
+    heatCanvas?.setAttribute('data-dev-report-count', String(devHeatCount));
+    heatCanvas?.setAttribute('data-scale-max', String(HEAT_SCALE_MAX));
     overviewMap.getContainer()
       .querySelector('.leaflet-heatmap-layer')
       ?.setAttribute('data-cell-count', String(visibleCells.length));
@@ -377,26 +475,67 @@
     }
   }
 
-  async function loadHistory() {
-    historyAbortController?.abort();
+  function historyCacheIsFresh() {
+    return historyTimelineCache.size > 0
+      && Date.now() - historyTimelineCachedAt < HISTORY_CACHE_TTL_MS;
+  }
+
+  function fetchHistoryTimeline() {
+    if (historyCacheIsFresh()) return Promise.resolve(historyTimelineCache);
+    if (historyTimelinePromise) return historyTimelinePromise;
+
     historyAbortController = new AbortController();
+    historyTimelinePromise = fetch(
+      apiUrl(
+        `/history?bbox=${encodeURIComponent(philippinesBbox)}`
+        + `&minutes=${HISTORY_MAX_MINUTES}&step=${HISTORY_STEP_MINUTES}`
+      ),
+      { cache: 'no-store', signal: historyAbortController.signal }
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error(`History request failed: ${response.status}`);
+        return response.json();
+      })
+      .then((timeline) => {
+        const nextCache = new Map();
+        for (const snapshot of timeline.snapshots || []) {
+          nextCache.set(Number(snapshot.offsetMinutes), snapshot.cells || []);
+        }
+        historyTimelineCache = nextCache;
+        historyTimelineCachedAt = Date.now();
+        return historyTimelineCache;
+      })
+      .finally(() => {
+        historyTimelinePromise = undefined;
+      });
+
+    return historyTimelinePromise;
+  }
+
+  async function loadHistory() {
+    const requestedOffset = historyOffsetMinutes;
     const requestId = ++historyRequestId;
-    const observedAt = Date.now() - historyOffsetMinutes * 60 * 1000;
+    const cachedCells = historyTimelineCache.get(requestedOffset);
+
+    if (cachedCells) {
+      displayedHeatCells = cachedCells;
+      renderHeatCells(displayedHeatCells);
+      if (historyCacheIsFresh()) return;
+    }
 
     try {
-      const response = await fetch(
-        apiUrl(`/history?bbox=${encodeURIComponent(philippinesBbox)}&at=${observedAt}`),
-        { cache: 'no-store', signal: historyAbortController.signal }
-      );
-      if (!response.ok) throw new Error(`History request failed: ${response.status}`);
-      const snapshot = await response.json();
-      if (requestId !== historyRequestId || historyOffsetMinutes === 0) return;
-      displayedHeatCells = snapshot.cells;
+      const timeline = await fetchHistoryTimeline();
+      if (
+        requestId !== historyRequestId ||
+        historyOffsetMinutes === 0 ||
+        historyOffsetMinutes !== requestedOffset
+      ) return;
+      displayedHeatCells = timeline.get(requestedOffset) || [];
       renderHeatCells(displayedHeatCells);
     } catch (error) {
       if (error.name === 'AbortError') return;
       if (requestId !== historyRequestId || historyOffsetMinutes === 0) return;
-      displayedHeatCells = [];
+      displayedHeatCells = cachedCells || [];
       renderHeatCells(displayedHeatCells);
     }
   }
@@ -410,7 +549,6 @@
     updateHistoryLabel();
 
     if (historyOffsetMinutes === 0) {
-      historyAbortController?.abort();
       historyRequestId += 1;
       displayedHeatCells = latestHeatCells;
       renderHeatCells();
@@ -454,13 +592,32 @@
     });
   }
 
-  function syncHeatmapToMap() {
+  function syncHeatmapToMap(event) {
+    if (Number.isFinite(event?.zoom)) pendingHeatZoom = event.zoom;
     if (heatSyncFrame !== undefined) return;
     heatSyncFrame = requestAnimationFrame(() => {
       heatSyncFrame = undefined;
-      heatLayer._reset?.();
+      updateHeatmapScale(pendingHeatZoom);
+      pendingHeatZoom = undefined;
       updateOverviewViewport();
     });
+  }
+
+  function updateHeatmapScale(requestedZoom = map.getZoom()) {
+    const zoom = Math.round(requestedZoom * 2) / 2;
+    if (zoom === heatStyleZoom) return;
+    heatStyleZoom = zoom;
+
+    const zoomRange = GPS_DEFAULT_ZOOM - GPS_MIN_ZOOM;
+    const zoomProgress = Math.max(0, Math.min(1, (zoom - GPS_MIN_ZOOM) / zoomRange));
+    const radius = Math.round(18 + (34 - 18) * zoomProgress);
+    const blur = Math.round(12 + (24 - 12) * zoomProgress);
+    heatLayer.setOptions({ radius, blur, max: HEAT_SCALE_MAX });
+    renderHeatCells();
+
+    const canvas = map.getContainer().querySelector('.leaflet-heatmap-layer');
+    canvas?.setAttribute('data-radius', String(radius));
+    canvas?.setAttribute('data-blur', String(blur));
   }
 
   function overviewViewportBounds() {
@@ -610,21 +767,21 @@
   }
 
   function beginZoom() {
-    map.getContainer().classList.add('is-zooming');
     showZoomLevel();
+    syncHeatmapToMap();
   }
 
   function finishZoom() {
+    syncHeatmapToMap();
     if (devGps) hideZoomLevelSoon();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        map.getContainer().classList.remove('is-zooming');
-      });
-    });
   }
 
   map.on('zoomstart', beginZoom);
-  map.on('zoom', showZoomLevel);
+  map.on('zoom', () => {
+    showZoomLevel();
+    syncHeatmapToMap();
+  });
+  map.on('zoomanim', syncHeatmapToMap);
   map.on('zoomend', finishZoom);
 
   historySlider.addEventListener('input', () => {

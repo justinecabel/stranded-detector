@@ -43,7 +43,7 @@ if (
 siteUrl.pathname = `${siteUrl.pathname.replace(/\/+$/, '')}/`;
 const canonicalUrl = siteUrl.href;
 const socialImageUrl = new URL('social-preview.png', canonicalUrl).href;
-const appIconUrl = new URL('icons/app-icon-512.png', canonicalUrl).href;
+const appIconUrl = new URL('icons/radar-icon-512.png', canonicalUrl).href;
 
 const structuredData = JSON.stringify({
   '@context': 'https://schema.org',

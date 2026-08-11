@@ -234,6 +234,40 @@ export function createApplication({
   app.get('/history', (req, res) => {
     const bbox = parseBbox(req.query.bbox);
     const currentTime = now();
+    const minutes = parseCoordinate(req.query.minutes);
+    const stepMinutes = parseCoordinate(req.query.step);
+    const wantsTimeline = req.query.minutes !== undefined || req.query.step !== undefined;
+
+    if (wantsTimeline) {
+      if (
+        !bbox ||
+        !Number.isInteger(minutes) ||
+        minutes < 5 ||
+        minutes > HISTORY_WINDOW_MS / 60_000 ||
+        !Number.isInteger(stepMinutes) ||
+        stepMinutes < 5 ||
+        stepMinutes > 60 ||
+        minutes % stepMinutes !== 0
+      ) {
+        return res.status(400).json({ error: 'A valid history timeline is required' });
+      }
+
+      const from = currentTime - minutes * 60_000;
+      const stepMs = stepMinutes * 60_000;
+      const snapshots = database.historyTimeline(bbox, from, currentTime, stepMs)
+        .map((snapshot) => ({
+          ...snapshot,
+          offsetMinutes: Math.round((currentTime - snapshot.observedAt) / 60_000)
+        }));
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        generatedAt: new Date(currentTime).toISOString(),
+        minutes,
+        stepMinutes,
+        snapshots
+      });
+    }
+
     const observedAt = parseCoordinate(req.query.at);
     if (
       !bbox ||

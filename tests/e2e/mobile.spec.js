@@ -295,11 +295,14 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
   const heatLayer = page.locator('#map .leaflet-heatmap-layer');
   await expect(heatLayer).toHaveCount(1);
   await expect(page.locator('#overview-map .leaflet-heatmap-layer')).toHaveCount(1);
+  const heatTransformBeforeDrag = await heatLayer.evaluate((element) => element.style.transform);
 
   await page.mouse.move(195, 360);
   await page.mouse.down();
   await page.mouse.move(80, 280, { steps: 8 });
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
+  const heatTransformDuringDrag = await heatLayer.evaluate((element) => element.style.transform);
+  expect(heatTransformDuringDrag).toBe(heatTransformBeforeDrag);
 
   await page.mouse.up();
   await expect(heatLayer).not.toHaveCSS('opacity', '0');
@@ -423,15 +426,47 @@ test('development GPS query simulates Manila without browser permission', async 
 
 test('GPS map supports the zoom 10 to 20 navigation range', async ({ page }) => {
   await page.goto('/?devGps=manila');
+  const heatLayer = page.locator('#map .leaflet-heatmap-layer');
+  await expect.poll(() => heatLayer.getAttribute('data-radius')).toBe('34');
+  await expect.poll(() => heatLayer.getAttribute('data-blur')).toBe('24');
   await page.mouse.move(200, 240);
   for (let step = 0; step < 12; step += 1) {
     await page.mouse.wheel(0, 1000);
+    await expect(heatLayer).not.toHaveCSS('opacity', '0');
     await page.waitForTimeout(350);
   }
   await expect(page.locator('#zoom-level')).toHaveText('Zoom 10');
+  await expect.poll(() => heatLayer.getAttribute('data-radius')).toBe('18');
+  await expect.poll(() => heatLayer.getAttribute('data-blur')).toBe('12');
   await page.mouse.wheel(0, 1000);
   await page.waitForTimeout(400);
   await expect(page.locator('#zoom-level')).toHaveText('Zoom 10');
+});
+
+test('development heatmap combines 100 dummy reports by volume', async ({ page }) => {
+  await page.goto('/?devGps=manila&devHeat=100');
+  const heatLayer = page.locator('#map .leaflet-heatmap-layer');
+
+  await expect.poll(() => heatLayer.getAttribute('data-dev-report-count')).toBe('100');
+  await expect.poll(() => heatLayer.getAttribute('data-scale-max')).toBe('100');
+  await expect.poll(async () => Number(await heatLayer.getAttribute('data-cell-count')))
+    .toBeGreaterThanOrEqual(100);
+  const closeZoomPeak = Number(await heatLayer.getAttribute('data-peak-count'));
+  const closeZoomClusters = Number(await heatLayer.getAttribute('data-cluster-count'));
+
+  await page.mouse.move(200, 240);
+  for (let step = 0; step < 10; step += 1) {
+    await page.mouse.wheel(0, 1000);
+    await page.waitForTimeout(350);
+  }
+
+  await expect(page.locator('#zoom-level')).toHaveText('Zoom 10');
+  await expect.poll(() => heatLayer.getAttribute('data-radius')).toBe('18');
+  await expect.poll(async () => Number(await heatLayer.getAttribute('data-peak-count')))
+    .toBeGreaterThan(closeZoomPeak);
+  await expect.poll(async () => Number(await heatLayer.getAttribute('data-cluster-count')))
+    .toBeLessThan(closeZoomClusters);
+  await expect(heatLayer).not.toHaveCSS('opacity', '0');
 });
 
 test('history label uses the free viewport margin at wide widths', async ({ browser }) => {
@@ -463,4 +498,29 @@ test('history label uses the free viewport margin at wide widths', async ({ brow
   expect(layout.pointerToTimelineEnd).toBeCloseTo(0, 1);
 
   await context.close();
+});
+
+test('history scrubber reuses one cached timeline request', async ({ page }) => {
+  let historyRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/history')) historyRequests += 1;
+  });
+
+  await page.goto('/?devGps=manila');
+  const historySlider = page.locator('#history-slider');
+  const timelineResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith('/history')
+      && url.searchParams.get('minutes') === '180'
+      && url.searchParams.get('step') === '5';
+  });
+
+  await historySlider.fill('180');
+  await timelineResponse;
+  for (const offset of ['175', '120', '60', '15', '5', '90', '0', '30']) {
+    await historySlider.fill(offset);
+  }
+  await page.waitForTimeout(150);
+
+  expect(historyRequests).toBe(1);
 });

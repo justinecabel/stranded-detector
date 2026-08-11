@@ -62,12 +62,16 @@ test('renders the mobile app, health check, and local vendor assets', async () =
       .expect(200);
     const manifest = await request(system.app).get('/manifest.webmanifest').expect(200);
     assert.equal(manifest.body.name, 'Stranded Philippines');
-    assert.equal(manifest.body.display, 'standalone');
+    assert.equal(manifest.body.display, 'fullscreen');
+    assert.deepEqual(manifest.body.display_override, ['fullscreen', 'standalone']);
     assert.equal(manifest.body.icons.length, 3);
+    assert.equal(manifest.body.icons[0].src, './icons/radar-icon-192.png');
+    assert.equal(manifest.body.icons[2].purpose, 'maskable');
     const serviceWorker = await request(system.app).get('/service-worker.js').expect(200);
     assert.match(serviceWorker.text, /NETWORK_ONLY_PATHS/);
     assert.equal(serviceWorker.headers['service-worker-allowed'], '/');
-    await request(system.app).get('/icons/app-icon-192.png').expect(200);
+    await request(system.app).get('/icons/radar-icon-192.png').expect(200);
+    await request(system.app).get('/icons/apple-touch-icon-180.png').expect(200);
   } finally {
     system.destroy();
   }
@@ -331,6 +335,19 @@ test('history endpoint returns heatmap state for the selected time', async () =>
       .get(`/history?bbox=${bbox}&at=${started + 360_000}`)
       .expect(200);
     assert.deepEqual(current.body.cells, []);
+
+    const timeline = await request(system.app)
+      .get(`/history?bbox=${bbox}&minutes=180&step=5`)
+      .expect(200);
+    assert.equal(timeline.body.snapshots.length, 37);
+    assert.deepEqual(timeline.body.snapshots[0].cells, []);
+    assert.equal(timeline.body.snapshots[1].offsetMinutes, 5);
+    assert.equal(timeline.body.snapshots[1].cells.length, 1);
+    assert.equal(timeline.body.snapshots[1].cells[0].count, 1);
+
+    await request(system.app)
+      .get(`/history?bbox=${bbox}&minutes=180&step=0`)
+      .expect(400);
 
     await request(system.app)
       .get(`/history?bbox=${bbox}&at=${started - 3 * 60 * 60 * 1000 - 1}`)
