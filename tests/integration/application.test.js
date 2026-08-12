@@ -45,6 +45,7 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.match(page.text, /Philippines overview heatmap and current viewport/);
     assert.doesNotMatch(page.text, /id="gps-permission"/);
     assert.match(page.text, /rel="manifest" href="\/manifest\.webmanifest"/);
+    assert.match(page.text, /href="\/assets\/styles\.css\?v=25"/);
     assert.doesNotMatch(page.text, /id="pwa-install"/);
     assert.match(page.text, /hx-post="\/reports"/);
     assert.match(
@@ -83,7 +84,8 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     const serviceWorker = await request(system.app).get('/service-worker.js').expect(200);
     assert.match(serviceWorker.text, /NETWORK_ONLY_PATHS/);
     assert.match(serviceWorker.text, /ALWAYS_FRESH_DESTINATIONS/);
-    assert.match(serviceWorker.text, /shell-v24/);
+    assert.match(serviceWorker.text, /shell-v25/);
+    assert.match(serviceWorker.text, /assets\/styles\.css\?v=25/);
     assert.equal(serviceWorker.headers['service-worker-allowed'], '/');
     await request(system.app).get('/icons/radar-icon-192.png').expect(200);
     await request(system.app).get('/icons/apple-touch-icon-180.png').expect(200);

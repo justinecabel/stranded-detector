@@ -27,6 +27,8 @@ body {
 
 html.is-installed-pwa,
 html.is-installed-pwa body {
+  height: 100vh;
+  min-height: 100vh;
   overscroll-behavior: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;

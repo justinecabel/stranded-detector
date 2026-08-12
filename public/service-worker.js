@@ -1,9 +1,9 @@
 const CACHE_PREFIX = 'stranded-philippines-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v24`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v25`;
 const APP_SHELL = [
   './offline.html',
   './manifest.webmanifest',
-  './assets/styles.css',
+  './assets/styles.css?v=25',
   './assets/app.js?v=24',
   './vendor/htmx/htmx.min.js',
   './vendor/leaflet/leaflet.css',

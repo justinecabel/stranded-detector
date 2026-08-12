@@ -211,8 +211,15 @@ test('installed PWA disables browser chrome gestures and text selection', async 
   );
   await expect(page.locator('body')).toHaveCSS('user-select', 'none');
   await expect(page.locator('body')).toHaveCSS('overscroll-behavior', 'none');
+  const viewportHeight = await page.evaluate(() => window.innerHeight);
+  await expect(page.locator('html')).toHaveCSS('min-height', `${viewportHeight}px`);
+  await expect(page.locator('body')).toHaveCSS('min-height', `${viewportHeight}px`);
   await expect(page.locator('#history-roller')).toHaveCSS('padding-bottom', '0px');
   await expect(page.locator('.control-panel')).toHaveCSS('bottom', '121px');
+  const dockBottom = await page.locator('#history-roller').evaluate(
+    (dock) => dock.getBoundingClientRect().bottom
+  );
+  expect(dockBottom).toBeCloseTo(viewportHeight, 1);
 
   const contextMenuPrevented = await page.evaluate(() => {
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
