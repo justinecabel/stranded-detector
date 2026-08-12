@@ -232,10 +232,19 @@ test('public frontend reports through its configured API without cookies', async
     const url = new URL(request.url());
     if (request.isNavigationRequest() && url.pathname === '/') {
       const response = await route.fetch();
-      const html = (await response.text()).replace(
-        'data-api-base-url=""',
-        'data-api-base-url="http://127.0.0.1:4173"'
-      );
+      const html = (await response.text())
+        .replace(
+          'data-api-base-url=""',
+          'data-api-base-url="http://127.0.0.1:4173"'
+        )
+        .replace(
+          'action="/reports"',
+          'action="http://127.0.0.1:4173/reports"'
+        )
+        .replace(
+          'hx-post="/reports"',
+          'hx-post="http://127.0.0.1:4173/reports"'
+        );
       await route.fulfill({ response, body: html });
       return;
     }

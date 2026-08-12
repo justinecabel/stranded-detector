@@ -63,7 +63,8 @@
   }
 
   function apiUrl(pathname) {
-    return apiBaseUrl ? `${apiBaseUrl}${pathname}` : pathname;
+    if (!apiBaseUrl) return pathname;
+    return new URL(pathname, `${apiBaseUrl}/`).toString();
   }
 
   function createBrowserDeviceToken() {
