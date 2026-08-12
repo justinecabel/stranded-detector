@@ -85,14 +85,14 @@ PowerShell setup:
 Copy-Item .env.funnel.example .env.funnel
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # Put the generated value in COOKIE_SECRET and your Tailscale key in TS_AUTHKEY.
-docker compose --env-file .env.funnel -f compose.funnel.yaml up --build -d
+docker compose -f compose.funnel.yaml up --build -d
 ```
 
 Show the public Funnel URL and follow startup logs:
 
 ```powershell
-docker compose --env-file .env.funnel -f compose.funnel.yaml exec tailscale tailscale funnel status
-docker compose --env-file .env.funnel -f compose.funnel.yaml logs -f tailscale stranded-detector
+docker compose -f compose.funnel.yaml exec tailscale tailscale funnel status
+docker compose -f compose.funnel.yaml logs -f tailscale stranded-detector
 ```
 
 The Tailscale identity and SQLite database are stored in separate named

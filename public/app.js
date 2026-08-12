@@ -832,9 +832,20 @@
     if (devGps) hideZoomLevelSoon();
   }
 
+  function syncHeatmapDuringPinch(event) {
+    if (!event?.pinch) return;
+
+    // Leaflet markers update on every fractional pinch-zoom frame, while
+    // leaflet.heat normally resets only after moveend. Redraw against the
+    // current pixel origin so heat points remain locked to their coordinates.
+    updateHeatmapScale(map.getZoom());
+    heatLayer._reset();
+  }
+
   map.on('zoomstart', beginZoom);
-  map.on('zoom', () => {
+  map.on('zoom', (event) => {
     showZoomLevel();
+    syncHeatmapDuringPinch(event);
     syncMapOverlays();
   });
   map.on('zoomanim', syncMapOverlays);

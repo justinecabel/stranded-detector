@@ -412,6 +412,40 @@ test('heatmap stays synchronized while browsing the map', async ({ browser }) =>
     Math.abs((await heatOffsetFromGps()).y - offsetBeforeDrag.y)
   ).toBeLessThanOrEqual(1.1);
 
+  const devtools = await context.newCDPSession(page);
+  const pinchPoint = (x) => ({
+    x,
+    y: 180,
+    radiusX: 2,
+    radiusY: 2,
+    force: 1
+  });
+  await devtools.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [pinchPoint(40), pinchPoint(160)]
+  });
+
+  const pinchDrift = [];
+  for (let step = 1; step <= 10; step += 1) {
+    const halfSpan = 60 - step * 4;
+    await devtools.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [pinchPoint(100 - halfSpan), pinchPoint(100 + halfSpan)]
+    });
+    await page.waitForTimeout(25);
+    const offset = await heatOffsetFromGps();
+    pinchDrift.push(Math.hypot(
+      offset.x - offsetBeforeDrag.x,
+      offset.y - offsetBeforeDrag.y
+    ));
+  }
+  await devtools.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: []
+  });
+
+  expect(Math.max(...pinchDrift)).toBeLessThanOrEqual(2);
+
   await page.setViewportSize({ width: 421, height: 478 });
   const overview = page.locator('.overview-map');
   const overviewToggle = page.locator('#overview-map-toggle');
