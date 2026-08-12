@@ -211,6 +211,8 @@ test('installed PWA disables browser chrome gestures and text selection', async 
   );
   await expect(page.locator('body')).toHaveCSS('user-select', 'none');
   await expect(page.locator('body')).toHaveCSS('overscroll-behavior', 'none');
+  await expect(page.locator('#history-roller')).toHaveCSS('padding-bottom', '0px');
+  await expect(page.locator('.control-panel')).toHaveCSS('bottom', '121px');
 
   const contextMenuPrevented = await page.evaluate(() => {
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -218,6 +220,47 @@ test('installed PWA disables browser chrome gestures and text selection', async 
     return event.defaultPrevented;
   });
   expect(contextMenuPrevented).toBe(true);
+});
+
+test('public frontend reports through its configured API without cookies', async ({ browser }) => {
+  const context = await browser.newContext({
+    geolocation: { latitude: 14.5995, longitude: 120.9842 },
+    permissions: ['geolocation']
+  });
+  await context.route('**/*', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.isNavigationRequest() && url.pathname === '/') {
+      const response = await route.fetch();
+      const html = (await response.text()).replace(
+        'data-api-base-url=""',
+        'data-api-base-url="http://127.0.0.1:4173"'
+      );
+      await route.fulfill({ response, body: html });
+      return;
+    }
+    await route.continue();
+  });
+
+  const page = await context.newPage();
+  const reportRequests = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname === '/reports') {
+      reportRequests.push(request);
+    }
+  });
+
+  await page.goto('/?devGps=manila');
+  await page.locator('#report-button').click();
+  await expect(page.locator('.active-report-state')).toHaveCount(1);
+  expect(reportRequests).toHaveLength(1);
+  expect(reportRequests[0].headers()['x-device-token']).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(reportRequests[0].headers()['hx-request']).toBe('true');
+
+  await page.locator('#report-button').click();
+  await expect(page.locator('.active-report-state')).toHaveCount(0);
+  await context.close();
 });
 
 test('denied GPS prevents reporting at 390px', async ({ browser }) => {

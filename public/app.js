@@ -72,19 +72,23 @@
     try {
       const existing = window.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
       if (/^[A-Za-z0-9_-]{43}$/.test(existing || '')) return existing;
-
-      const bytes = new Uint8Array(32);
-      window.crypto.getRandomValues(bytes);
-      const token = window
-        .btoa(String.fromCharCode(...bytes))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-      window.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
-      return token;
     } catch {
-      return '';
+      // An in-memory token still preserves ownership for this PWA session.
     }
+
+    const bytes = new Uint8Array(32);
+    window.crypto.getRandomValues(bytes);
+    const token = window
+      .btoa(String.fromCharCode(...bytes))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    try {
+      window.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+    } catch {
+      // Storage can be unavailable in private or restored standalone sessions.
+    }
+    return token;
   }
 
   const browserDeviceToken = createBrowserDeviceToken();
@@ -1151,12 +1155,15 @@
     }
 
     reportButton.style.setProperty('--report-progress', '0%');
-    if (!expiryRefreshPending && window.htmx) {
+    if (!expiryRefreshPending && (apiBaseUrl || window.htmx)) {
       expiryRefreshPending = true;
-      window.htmx.ajax('GET', apiUrl('/reports/mine'), {
-        target: '#active-reports',
-        swap: 'outerHTML'
-      });
+      if (apiBaseUrl) loadActiveReportsFromApi();
+      else {
+        window.htmx.ajax('GET', '/reports/mine', {
+          target: '#active-reports',
+          swap: 'outerHTML'
+        });
+      }
     }
   }
 
@@ -1201,21 +1208,108 @@
   document.body.addEventListener('reportLimited', (event) => {
     startReportCooldown(Number(event.detail?.cooldownMs) || 5000);
   });
-  function loadActiveReportsFromApi() {
-    if (!apiBaseUrl || !window.htmx) return;
 
-    window.htmx.ajax('GET', apiUrl('/reports/mine'), {
-      target: '#active-reports',
-      swap: 'outerHTML'
-    }).catch(() => {
+  function apiHeaders(includeContentType = false) {
+    const headers = {
+      Accept: 'text/html',
+      'HX-Request': 'true'
+    };
+    if (browserDeviceToken) headers['X-Device-Token'] = browserDeviceToken;
+    if (includeContentType) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+    }
+    return headers;
+  }
+
+  function dispatchResponseTriggers(value) {
+    if (!value) return;
+    try {
+      const triggers = JSON.parse(value);
+      if (typeof triggers === 'string') {
+        document.body.dispatchEvent(new CustomEvent(triggers));
+        return;
+      }
+      for (const [name, detail] of Object.entries(triggers)) {
+        document.body.dispatchEvent(new CustomEvent(name, { detail }));
+      }
+    } catch {
+      document.body.dispatchEvent(new CustomEvent(value));
+    }
+  }
+
+  function replaceActiveReports(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html.trim();
+    const replacement = template.content.querySelector('#active-reports');
+    const current = document.querySelector('#active-reports');
+    if (!replacement || !current) throw new Error('Invalid reporting response');
+    current.replaceWith(replacement);
+    expiryRefreshPending = false;
+    startCountdowns();
+    renderHeatCells();
+  }
+
+  async function loadActiveReportsFromApi() {
+    if (!apiBaseUrl) return;
+
+    try {
+      const response = await fetch(apiUrl('/reports/mine'), {
+        cache: 'no-store',
+        credentials: 'omit',
+        headers: apiHeaders()
+      });
+      if (!response.ok) throw new Error(`Reports request failed: ${response.status}`);
+      replaceActiveReports(await response.text());
+    } catch {
       expiryRefreshPending = false;
-    });
+      reportStatus.innerHTML =
+        '<p class="message message--error">Reporting service unavailable. Check your connection.</p>';
+    }
+  }
+
+  async function submitCrossOriginReportForm(event) {
+    if (!apiBaseUrl) return;
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!form.matches('.gps-report-form, .active-report-state')) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const body = new URLSearchParams();
+    for (const [name, value] of new FormData(form)) body.append(name, String(value));
+
+    try {
+      const response = await fetch(apiUrl(form.getAttribute('action')), {
+        method: 'POST',
+        credentials: 'omit',
+        headers: apiHeaders(true),
+        body
+      });
+      const html = await response.text();
+      const trigger = response.headers.get('HX-Trigger');
+
+      if (response.status === 429) {
+        dispatchResponseTriggers(trigger);
+        return;
+      }
+      if (!response.ok) {
+        reportStatus.innerHTML = html
+          || '<p class="message message--error">Unable to save this report.</p>';
+        resetReportButton();
+        return;
+      }
+
+      replaceActiveReports(html);
+      dispatchResponseTriggers(trigger);
+    } catch {
+      resetReportButton();
+      reportStatus.innerHTML =
+        '<p class="message message--error">Reporting service unavailable. Check your connection.</p>';
+    }
   }
 
   if (apiBaseUrl) {
-    // HTMX reads the cross-origin policy from its meta tag on DOMContentLoaded.
-    // Deferred app scripts run just before that event, so wait until HTMX has
-    // applied the policy before making the first Funnel request.
+    document.addEventListener('submit', submitCrossOriginReportForm, true);
     window.addEventListener('DOMContentLoaded', loadActiveReportsFromApi, { once: true });
   }
 

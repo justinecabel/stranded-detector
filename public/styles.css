@@ -43,6 +43,14 @@ html.is-installed-pwa svg {
   user-drag: none;
 }
 
+html.is-installed-pwa .history-roller {
+  padding-bottom: 0;
+}
+
+html.is-installed-pwa .control-panel {
+  bottom: 7.5625rem;
+}
+
 button,
 input {
   font: inherit;
