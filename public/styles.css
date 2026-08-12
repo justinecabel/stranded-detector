@@ -25,6 +25,24 @@ body {
   background: var(--ink);
 }
 
+html.is-installed-pwa,
+html.is-installed-pwa body {
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.is-installed-pwa * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.is-installed-pwa img,
+html.is-installed-pwa svg {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 button,
 input {
   font: inherit;

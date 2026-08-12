@@ -182,6 +182,10 @@ test('PWA is installable without overriding the browser install prompt', async (
     const registration = await navigator.serviceWorker.ready;
     return new URL(registration.scope).pathname;
   })).toBe('/');
+  await expect.poll(() => page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return registration.updateViaCache;
+  })).toBe('none');
   await expect(page.getByRole('button', { name: 'Install', exact: true })).toHaveCount(0);
   const browserPromptWasPrevented = await page.evaluate(() => {
     const installEvent = new Event('beforeinstallprompt', { cancelable: true });
@@ -189,6 +193,31 @@ test('PWA is installable without overriding the browser install prompt', async (
     return installEvent.defaultPrevented;
   });
   expect(browserPromptWasPrevented).toBe(false);
+});
+
+test('installed PWA disables browser chrome gestures and text selection', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true
+    });
+  });
+
+  await page.goto('/?devGps=manila');
+  await expect(page.locator('html')).toHaveClass(/is-installed-pwa/);
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    'content',
+    /maximum-scale=1, user-scalable=no/
+  );
+  await expect(page.locator('body')).toHaveCSS('user-select', 'none');
+  await expect(page.locator('body')).toHaveCSS('overscroll-behavior', 'none');
+
+  const contextMenuPrevented = await page.evaluate(() => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(contextMenuPrevented).toBe(true);
 });
 
 test('denied GPS prevents reporting at 390px', async ({ browser }) => {

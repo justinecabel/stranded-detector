@@ -1,10 +1,10 @@
 const CACHE_PREFIX = 'stranded-philippines-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v19`;
+const CACHE_NAME = `${CACHE_PREFIX}shell-v21`;
 const APP_SHELL = [
   './offline.html',
   './manifest.webmanifest',
   './assets/styles.css',
-  './assets/app.js?v=19',
+  './assets/app.js?v=21',
   './vendor/htmx/htmx.min.js',
   './vendor/leaflet/leaflet.css',
   './vendor/leaflet/leaflet.js',
@@ -18,6 +18,20 @@ const APP_SHELL = [
   './icons/apple-touch-icon-180.png'
 ];
 const NETWORK_ONLY_PATHS = ['/events', '/history', '/reports', '/healthz'];
+const ALWAYS_FRESH_DESTINATIONS = new Set(['manifest', 'script', 'style', 'worker']);
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return (await caches.match(request)) || Response.error();
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -53,6 +67,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request).catch(() => caches.match('./offline.html'))
     );
+    return;
+  }
+
+  if (
+    ALWAYS_FRESH_DESTINATIONS.has(request.destination)
+    || url.pathname.endsWith('/manifest.webmanifest')
+  ) {
+    event.respondWith(networkFirst(request));
     return;
   }
 

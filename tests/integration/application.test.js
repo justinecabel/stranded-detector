@@ -82,6 +82,8 @@ test('renders the mobile app, health check, and local vendor assets', async () =
     assert.equal(manifest.body.icons[2].purpose, 'maskable');
     const serviceWorker = await request(system.app).get('/service-worker.js').expect(200);
     assert.match(serviceWorker.text, /NETWORK_ONLY_PATHS/);
+    assert.match(serviceWorker.text, /ALWAYS_FRESH_DESTINATIONS/);
+    assert.match(serviceWorker.text, /shell-v21/);
     assert.equal(serviceWorker.headers['service-worker-allowed'], '/');
     await request(system.app).get('/icons/radar-icon-192.png').expect(200);
     await request(system.app).get('/icons/apple-touch-icon-180.png').expect(200);

@@ -37,6 +37,31 @@
     1: '#7f1d1d'
   };
 
+  const installedPwa = window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || window.navigator.standalone === true;
+
+  if (installedPwa) {
+    document.documentElement.classList.add('is-installed-pwa');
+    document.querySelector('meta[name="viewport"]')?.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+    );
+
+    const preventNativeGesture = (event) => event.preventDefault();
+    document.addEventListener('contextmenu', preventNativeGesture);
+    document.addEventListener('gesturestart', preventNativeGesture, { passive: false });
+    document.addEventListener('wheel', (event) => {
+      if (event.ctrlKey) event.preventDefault();
+    }, { passive: false });
+    document.addEventListener('keydown', (event) => {
+      if (
+        (event.ctrlKey || event.metaKey)
+        && ['+', '-', '=', '0'].includes(event.key)
+      ) event.preventDefault();
+    });
+  }
+
   function apiUrl(pathname) {
     return apiBaseUrl ? `${apiBaseUrl}${pathname}` : pathname;
   }
@@ -1195,11 +1220,37 @@
   }
 
   if ('serviceWorker' in navigator) {
+    const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+    let reloadingForServiceWorkerUpdate = false;
+
+    if (hadServiceWorkerController) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadingForServiceWorkerUpdate) return;
+        reloadingForServiceWorkerUpdate = true;
+        window.location.reload();
+      });
+    }
+
     window.addEventListener('load', () => {
       const manifestLink = document.querySelector('link[rel="manifest"]');
       const pwaRoot = new URL('./', manifestLink.href);
       const serviceWorkerUrl = new URL('service-worker.js', pwaRoot);
-      navigator.serviceWorker.register(serviceWorkerUrl, { scope: pwaRoot.pathname })
+      navigator.serviceWorker.register(serviceWorkerUrl, {
+        scope: pwaRoot.pathname,
+        updateViaCache: 'none'
+      })
+        .then((registration) => {
+          registration.waiting?.postMessage('SKIP_WAITING');
+          registration.addEventListener('updatefound', () => {
+            const worker = registration.installing;
+            worker?.addEventListener('statechange', () => {
+              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                worker.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+          return registration.update();
+        })
         .catch(() => {
           // Installation remains available through the browser menu if registration fails.
         });
